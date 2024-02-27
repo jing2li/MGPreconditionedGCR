@@ -1,0 +1,3 @@
+/home/jing2li/Desktop/SemesterProject2024/MGPreconditionedGCR/src/cmake-build-debug/CMakeFiles/MGPreconditionedGCR.dir
+/home/jing2li/Desktop/SemesterProject2024/MGPreconditionedGCR/src/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/jing2li/Desktop/SemesterProject2024/MGPreconditionedGCR/src/cmake-build-debug/CMakeFiles/rebuild_cache.dir
