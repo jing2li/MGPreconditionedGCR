@@ -12,4 +12,5 @@ add_executable(MGPreconditionedGCR main.cpp
         Fields.cpp
         Fields.h
         MG.cpp
-        MG.h)
+        MG.h
+        utils.h)

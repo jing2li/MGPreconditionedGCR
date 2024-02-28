@@ -7,6 +7,8 @@
 
 #include <iostream>
 #include <cassert>
+#include <complex>
+
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 
@@ -23,7 +25,9 @@ public:
     int field_size() {return size;}
 
     // 3. retrieve value at location index
-    double val(int const *index);
+    std::complex<double> val(int const *index);
+
+    ~Boson();
 
 private:
     // dimensions
@@ -33,7 +37,7 @@ private:
     int size;
 
     // boson field
-    double *u_field;
+    std::complex<double> *u_field;
 };
 
 class Fermion {
@@ -41,7 +45,9 @@ public:
     explicit Fermion(int const *index_dim);
 
     // retrive value at location index
-    double val(int const *index);
+    std::complex<double> val(int const *index);
+
+    ~Fermion();
 
 private:
     // dimensions
@@ -51,8 +57,7 @@ private:
     int size;
 
     // fermion field
-    double *phi_field;
-
+    std::complex<double> *phi_field;
 };
 
 
