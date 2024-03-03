@@ -3,7 +3,6 @@
 //
 
 #include "GCR.h"
-#include <complex>
 #include "utils.h"
 
 #define one std::complex<double> (1.,0)
@@ -11,13 +10,11 @@
 
 GCR::GCR(const std::complex<double> *matrix, const int dimension) {
     dim = dimension;
-    A = (std::complex<double> *)(malloc(sizeof(std::complex<double>) * dim * dim));
-    for (int i=0; i<dim*dim; i++) {
-        A[i] = matrix[i];
-    }
+    A = (std::complex<double> *) malloc(sizeof(std::complex<double>) * dim * dim);
+    vec_copy(matrix, A, dim*dim);
 }
 
-void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const double tol=1e-12) {
+void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const double tol, const int max_iter) {
     // 4 intermediate vector storage required (excl. x)
     std::complex<double> *p = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
     std::complex<double> *Ap = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
@@ -87,10 +84,10 @@ void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const 
 
         printf("Step %d residual norm = %f\n", iter_count, vec_norm(r, dim).real());
 
-    } while (vec_norm(r, dim).real() > tol && iter_count<100);
+    } while (vec_norm(r, dim).real() > tol && iter_count<max_iter);
 
-    if (iter_count==100)
-        printf("GCR did not converge after 100 steps! Residual norm = %f\n", vec_norm(r, dim).real());
+    if (iter_count==max_iter)
+        printf("GCR did not converge after %d steps! Residual norm = %f\n", max_iter, vec_norm(r, dim).real());
 
     // free memory
     free(p);
@@ -99,4 +96,8 @@ void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const 
     free(Ar);
     free(Aps);
     free(ps);
+}
+
+GCR::~GCR() {
+    free(A);
 }

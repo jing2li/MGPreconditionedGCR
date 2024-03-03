@@ -12,7 +12,7 @@ Boson::Boson(int const* index_dim) {
 
     // random initialisation of u_field to a value [-1, 1]
     size = dim[0] * dim[1] * dim[2] * dim[3] * dim[4] * dim[5] * dim[6];
-    u_field = new std::complex<double>[size];
+    u_field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
     for (int i=0; i<size; i++) {
         u_field[i] = rand() % 2000/1000. - 1;
     }
@@ -30,7 +30,7 @@ std::complex<double> Boson::val(int const *index) {
 }
 
 Boson::~Boson() {
-    delete []u_field;
+    free(u_field);
 }
 
 
@@ -42,7 +42,7 @@ Fermion::Fermion(const int *index_dim) {
 
     // random initialisation to a value [-1, 1]
     size = dim[0] * dim[1] * dim[2] * dim[3] * dim[4];
-    phi_field = new std::complex<double>[size];
+    phi_field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
     for (int i=0; i<size; i++) {
         phi_field[i] = 2. * rand()/RAND_MAX - 1;
     }
@@ -61,5 +61,5 @@ std::complex<double> Fermion::val(int const *index) {
 }
 
 Fermion::~Fermion() {
-    delete []phi_field;
+    free(phi_field);
 }

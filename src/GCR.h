@@ -7,21 +7,22 @@
 
 #include <complex>
 
+
 // for solving Ax = rhs
 class GCR {
 public:
     // load LSE that needs to be solved
+    GCR(){A = nullptr; dim=0;};
     GCR(const std::complex<double> *matrix, const int dimension);
 
     // solve for Ax = rhs
-    void solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol);
+    void solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol, const int max_iter);
 
-    ~GCR() {free(A);};
+    ~GCR();
 private:
     std::complex<double> *A;
 
-    // dimension of regular matrix A
-    int dim;
+    int dim; // dimension of regular matrix A
 };
 
 

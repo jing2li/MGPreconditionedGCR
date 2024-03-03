@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cassert>
 #include <complex>
+#include "Mesh.h"
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 

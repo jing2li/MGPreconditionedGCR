@@ -47,7 +47,7 @@ void test_GCR(const int dim) {
     }
 
     GCR gcr(A, dim);
-    gcr.solve(rhs, x, 1e-12);
+    gcr.solve(rhs, x, 1e-12, 100);
     std::cout<< "GCR solution:\t";
     for (int i=0; i<dim; i++){
         std::cout << x[i] << " ";
