@@ -13,14 +13,16 @@
 class MG {
 public:
     MG(const std::complex<double> *matrix, const int dimension, const int nlevels, const int subblocks, const int eigens);
-    void iter_solve(const std::complex<double> *rhs, const std::complex<double> *x, const double tol, const int max_iter);
+    void recursive_solve(const std::complex<double> *mat, const std::complex<double> *rhs, std::complex<double> *x,
+                    int const dimension, const int cur_level);
+    void solve(const std::complex<double> *rhs, std::complex<double> *x,  const double tol, const int max_iter);
     void compute_prolongator(Mesh mesh);
     ~MG();
 private:
     int dim;
     std::complex<double> *A;
     std::complex<double> *P; // prolongator
-    GCR gcr_solver;
+    GCR gcr_solver; // smoother
 
     int levels; // levels of coarsening
     int subblock_dim; // dimension of subblocks in geometric coarsening

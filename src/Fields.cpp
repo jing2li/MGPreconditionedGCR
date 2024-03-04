@@ -10,21 +10,23 @@ Boson::Boson(int const* index_dim) {
         dim[i] = index_dim[i];
     }
 
+    // initialise mesh
+    mesh = Mesh(index_dim, 7);
+
     // random initialisation of u_field to a value [-1, 1]
-    size = dim[0] * dim[1] * dim[2] * dim[3] * dim[4] * dim[5] * dim[6];
+    int size = mesh.get_size();
     u_field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
     for (int i=0; i<size; i++) {
         u_field[i] = rand() % 2000/1000. - 1;
     }
 }
 
-std::complex<double> Boson::val(int const *index) {
+std::complex<double> Boson::val_at(int const *index) {
     for (int i=0; i<7; i++) {
         assertm(index[i] < dim[i], "Boson memory access out of bound!");
     }
 
-    const int ind = index[0] + dim[0] * (index[1] + dim[1] * (index[2] + dim[2] * (index[3] + dim[3] *
-            (index[4] + dim[4] * (index[5] + dim[5] * index[6])))));
+    const int ind = Mesh::ind_loc(index, dim, 7);
 
     return u_field[ind];
 }
@@ -40,8 +42,11 @@ Fermion::Fermion(const int *index_dim) {
         dim[i] = index_dim[i];
     }
 
+    // initialise mesh
+    mesh = Mesh(index_dim, 5);
+
     // random initialisation to a value [-1, 1]
-    size = dim[0] * dim[1] * dim[2] * dim[3] * dim[4];
+    int const size = mesh.get_size();
     phi_field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
     for (int i=0; i<size; i++) {
         phi_field[i] = 2. * rand()/RAND_MAX - 1;
@@ -49,13 +54,12 @@ Fermion::Fermion(const int *index_dim) {
 }
 
 
-std::complex<double> Fermion::val(int const *index) {
+std::complex<double> Fermion::val_at(const int *index) {
     for (int i=0; i<7; i++) {
         assertm(index[i] < dim[i], "Fermion memory access out of bound!");
     }
 
-    const int ind = index[0] + dim[0] * (index[1] + dim[1] * (index[2] + dim[2] * (index[3] + dim[3] *
-                                                                                              index[4])));
+    const int ind = Mesh::ind_loc(index, dim, 5);
 
     return phi_field[ind];
 }

@@ -16,49 +16,39 @@
 class Boson {
 public:
     // initialise boson field memory layout, fastest to slowest
-    explicit Boson(int const *index_dim);
+    explicit Boson (int const *index_dim);
 
     /*Query Boson information*/
-    // 1. get dimensions
+    // get dimensions
     int* get_dim() {return dim;}
 
-    // 2.  get length of u_field
-    int field_size() {return size;}
+    // get length of u_field
+    int field_size() {return mesh.get_size();}
 
-    // 3. retrieve value at location index
-    std::complex<double> val(int const *index);
+    // retrieve field value at an index
+    std::complex<double> val_at(int const *index);
 
     ~Boson();
 
 private:
-    // dimensions
-    int dim[7] = {0};
-
-    // size of u_field
-    int size;
-
-    // boson field
-    std::complex<double> *u_field;
+    int dim[7] = {0}; // dimensions
+    Mesh mesh; // for index computation
+    std::complex<double> *u_field;  // boson field values
 };
 
 class Fermion {
 public:
     explicit Fermion(int const *index_dim);
 
-    // retrive value at location index
-    std::complex<double> val(int const *index);
+    // retrive field value at an index
+    std::complex<double> val_at(int const *index);
 
     ~Fermion();
 
 private:
-    // dimensions
-    int dim[5] = {0};
-
-    // size of phi_field
-    int size;
-
-    // fermion field
-    std::complex<double> *phi_field;
+    int dim[5] = {0}; // dimensions
+    Mesh mesh;
+    std::complex<double> *phi_field; // fermion field values
 };
 
 
