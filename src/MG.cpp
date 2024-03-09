@@ -21,7 +21,7 @@ void MG::recursive_solve(const std::complex<double> *mat, const std::complex<dou
     if (cur_level == 1) // coarsest level solve directly
     {
         GCR inner_solver(mat, dimension);
-        inner_solver.solve(rhs, x, 1e-12, 1); // apply 1 iteration
+        inner_solver.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
     }
 
     else // middle levels
@@ -30,7 +30,7 @@ void MG::recursive_solve(const std::complex<double> *mat, const std::complex<dou
         double residual = 1.0;
         GCR gcr_smoother(mat, dimension);
         // 1. pre-smoothing
-        gcr_smoother.solve(rhs, x, 1e-12, 1); // apply 1 iteration
+        gcr_smoother.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
 
         // 2. coarse grid correction
         // 2.a map to coarse grid
@@ -57,7 +57,7 @@ void MG::recursive_solve(const std::complex<double> *mat, const std::complex<dou
         free(rhs_coarse);
 
         // 3. post-smoothing
-        gcr_smoother.solve(rhs, x, 1e-12, 1); // apply 1 iteration
+        gcr_smoother.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
     }
 }
 

@@ -65,3 +65,12 @@ void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std:
         }
     }
 }
+
+
+void mat_dagger(const std::complex<double> *A, std::complex<double> *B, const int dim) {
+    for (int i=0; i<dim; i++) {
+        for (int j=0; j<dim; j++) {
+            B[j*dim + i] = conj(A[i*dim + j]);
+        }
+    }
+}

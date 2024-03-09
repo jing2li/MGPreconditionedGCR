@@ -16,12 +16,11 @@ public:
     GCR(const std::complex<double> *matrix, const int dimension);
 
     // solve for Ax = rhs
-    void solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol, const int max_iter);
+    void solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol, const int max_iter, const int truncation);
 
     ~GCR();
 private:
     std::complex<double> *A;
-
     int dim; // dimension of regular matrix A
 };
 

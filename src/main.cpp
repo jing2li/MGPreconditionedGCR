@@ -8,7 +8,8 @@ void test_GCR(const int dim);
 
 
 int main() {
-    test_GCR(10);
+    // test with laplace operator
+    test_GCR(20);
 
 
     return 0;
@@ -37,17 +38,24 @@ void test_GCR(const int dim) {
     std::complex<double> *rhs = new std::complex<double>[dim];
     std::complex<double> *x = new std::complex<double>[dim];
 
-    for (int i=0; i<dim*dim; i++) {
-        A[i] = std::complex<double>(rand()%1000/1000., 0);
+    for (int i=0; i<dim; i++)
+    for(int j=0; j<dim; j++){
+        if (i==j)
+            A[i*dim + j] = 4;
+        if (i-j==1 || j-i==1)
+            A[i*dim + j] = -1;
+        //A[i*dim + j] = std::complex<double>(rand()%1000/1000., 0);
     }
 
     for (int i=0; i<dim; i++) {
         rhs[i] = std::complex<double>(rand()%1000/1000., 0);
+        //rhs[i] = std::complex<double>(0,0);
         x[i] = std::complex<double>(rand()%1000/100., 0);
     }
 
     GCR gcr(A, dim);
-    gcr.solve(rhs, x, 1e-12, 100);
+    gcr.solve(rhs, x, 1e-12, 100, 5);
+    //gcr.solve(rhs, x, 1e-12, 10, 50);
     std::cout<< "GCR solution:\t";
     for (int i=0; i<dim; i++){
         std::cout << x[i] << " ";

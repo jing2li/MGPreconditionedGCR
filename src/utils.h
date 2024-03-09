@@ -32,4 +32,5 @@ void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::
 // 2.2 matrix-matrix multiplication C = A * B
 void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std::complex<double> *C, const int dim);
 
+void mat_dagger(const std::complex<double> *A, std::complex<double> *B, const int dim);
 
