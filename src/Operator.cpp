@@ -4,7 +4,7 @@
 
 #include "Operator.h"
 #include "utils.h"
-#define one std::complex<double>(1.,  0.)
+#define one std::complex<double>(1., 0.)
 #define zero std::complex<double>(0., 0.)
 
 Operator::Operator(std::complex<double> *matrix, int const dimension) {
@@ -40,6 +40,17 @@ Operator Operator::operator*(Field const& f) {
     return new_op;
 }
 
+Operator Operator::dagger() {
+    std::complex<double>* new_mat = (std::complex<double> *)malloc(sizeof(std::complex<double>) * this->dim);
+    mat_dagger(this->mat, new_mat, this->dim);
+    Operator new_op(new_mat, this->dim);
+    free(new_mat);
+    return new_op;
+}
+
+Operator::~Operator() {
+// free(mat);
+}
 
 
 

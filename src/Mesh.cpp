@@ -69,7 +69,7 @@ int* Mesh::blocking(const int subblock_dim, const int blocked_dimensions[4]) {
 }
 
 Mesh::~Mesh() {
-    free(dim);
+//    free(dim);
 }
 
 int *Mesh::loc_ind(const int loc, const int *dims, const int ndims) {

@@ -35,8 +35,8 @@ void test_GCR(const int dim) {
     std::cout <<"testing solver of dimension "<< dim <<" x " << dim << std::endl;
     // randomise A
     std::complex<double> *A = new std::complex<double> [dim*dim];
-    std::complex<double> *rhs = new std::complex<double>[dim];
-    std::complex<double> *x = new std::complex<double>[dim];
+    //std::complex<double> *rhs = new std::complex<double>[dim];
+    //std::complex<double> *x = new std::complex<double>[dim];
 
     for (int i=0; i<dim; i++)
     for(int j=0; j<dim; j++){
@@ -47,18 +47,28 @@ void test_GCR(const int dim) {
         //A[i*dim + j] = std::complex<double>(rand()%1000/1000., 0);
     }
 
+    Operator M(A, dim);
+
+    free(A);
+    int dims[1] = {dim};
+    Field rhs(dims, 1);
+    rhs.init_rand();
+
+    Field x(dims, 1);
+    x.init_rand();
+
+    /*
     for (int i=0; i<dim; i++) {
         rhs[i] = std::complex<double>(rand()%1000/1000., 0);
         //rhs[i] = std::complex<double>(0,0);
         x[i] = std::complex<double>(rand()%1000/100., 0);
-    }
+    }*/
 
-    GCR gcr(A, dim);
+    GCR gcr(M);
     gcr.solve(rhs, x, 1e-12, 100, 5);
-    //gcr.solve(rhs, x, 1e-12, 10, 50);
     std::cout<< "GCR solution:\t";
     for (int i=0; i<dim; i++){
-        std::cout << x[i] << " ";
+        std::cout << x.field[i] << " ";
     }
     std::cout<<"\n";
 
@@ -66,18 +76,18 @@ void test_GCR(const int dim) {
     Eigen::MatrixXcd A_eigen(dim, dim);
     for (int i=0; i<dim; i++) {
         for (int j=0; j<dim; j++){
-            A_eigen(i, j) = A[i*dim + j];
+            A_eigen(i, j) = M.mat[i*dim + j];
         }
     }
     Eigen::VectorXcd rhs_eigen(dim);
     for (int i=0; i<dim; i++) {
-        rhs_eigen(i) = rhs[i];
+        rhs_eigen(i) = rhs.field[i];
     }
     Eigen::FullPivLU<Eigen::MatrixXcd> lu_decomp(A_eigen);
     auto exact_sol = lu_decomp.solve(rhs_eigen);
     Eigen::VectorXcd gcr_sol_eigen(dim);
     for (int i=0; i<dim; i++) {
-        gcr_sol_eigen(i) = x[i];
+        gcr_sol_eigen(i) = x.field[i];
     }
 
     std::cout<<"LU solution:\t";

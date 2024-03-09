@@ -14,7 +14,9 @@
 
 class Field {
 public:
-    Field(){};
+    Field() {};
+    Field(const int* dimensions, int ndim);
+    void init_rand(); // random initialisation of field to value [-1, 1]
 
     // Query Field information
     int* get_dim(); // get dimensions

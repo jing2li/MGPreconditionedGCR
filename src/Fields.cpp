@@ -4,12 +4,31 @@
 
 #include "Fields.h"
 
+Field::Field(const int *dimensions, int ndim) {
+    for (int i=0; i<ndim; i++){
+        dim[i] = dimensions[i];
+    }
+    nindex = ndim;
+    mesh = Mesh(dim, nindex);
+    field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
+}
+
 int *Field::get_dim() {
     return dim;
 }
 
 int Field::field_size() {
     return mesh.get_size();
+}
+
+
+void Field::init_rand() {
+    // random initialisation of u_field to a value [-1, 1]
+    int size = mesh.get_size();
+    field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
+    for (int i=0; i<size; i++) {
+        field[i] = rand() % 2000/1000. - 1;
+    }
 }
 
 std::complex<double> Field::val_at(const int *index) {
@@ -23,7 +42,7 @@ std::complex<double> Field::val_at(const int *index) {
 }
 
 Field::~Field() {
-    free(field);
+//    free(field);
 }
 
 Boson::Boson(int const* index_dim) {
@@ -35,13 +54,6 @@ Boson::Boson(int const* index_dim) {
 
     // initialise mesh
     mesh = Mesh(index_dim, nindex);
-
-    // random initialisation of u_field to a value [-1, 1]
-    int size = mesh.get_size();
-    field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
-    for (int i=0; i<size; i++) {
-        field[i] = rand() % 2000/1000. - 1;
-    }
 }
 
 
@@ -54,11 +66,4 @@ Fermion::Fermion(const int *index_dim) {
 
     // initialise mesh
     mesh = Mesh(index_dim, 6);
-
-    // random initialisation to a value [-1, 1]
-    int const size = mesh.get_size();
-    field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
-    for (int i=0; i<size; i++) {
-        field[i] = 2. * rand()/RAND_MAX - 1;
-    }
 }

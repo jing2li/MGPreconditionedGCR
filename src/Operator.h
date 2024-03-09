@@ -10,6 +10,7 @@
 
 class Operator {
 public:
+    Operator(){};
     Operator(std::complex<double> * matrix, int const dimension);
 
     /* Overloading operators +, *, () */
@@ -17,8 +18,15 @@ public:
     Operator operator*(Operator B); // matrix multiplication
     Operator operator*(const Field& f);
 
+    Operator dagger();
+    ~Operator();
+
     std::complex<double> *mat;
     int dim;
+};
+
+class Dirac : public Operator {
+
 };
 
 

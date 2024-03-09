@@ -56,6 +56,7 @@ void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::
     }
 }
 
+// 2.2 matrix-matrix multiplication
 void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std::complex<double> *C, const int dim) {
     for (int i=0; i<dim; i++) {
         for (int j=0; j<dim; j++) {
@@ -66,7 +67,7 @@ void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std:
     }
 }
 
-
+// 2.3 conjugate transpose B = A^+
 void mat_dagger(const std::complex<double> *A, std::complex<double> *B, const int dim) {
     for (int i=0; i<dim; i++) {
         for (int j=0; j<dim; j++) {
