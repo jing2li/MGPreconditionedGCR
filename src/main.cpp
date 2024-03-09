@@ -24,7 +24,7 @@ void test_fields() {
         for (int j=0; j<dim[5]; j++){
             for (int k=0; k<dim[4]; k++){
                 int index[7] = {1, 1, 1, 1, k, j, i};
-                std::cout << b1.val(index) << " ";
+                std::cout << b1.val_at(index) << " ";
             }
         }
     }

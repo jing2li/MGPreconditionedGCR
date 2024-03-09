@@ -29,7 +29,7 @@ int Mesh::ind_loc(int const *index, int const *dims, int const ndims) {
 int* Mesh::blocking(const int subblock_dim, const int blocked_dimensions[4]) {
     int spacetime_nid = 1; // #sites 4d space
     for (int d = 0; d < 4; d++) {
-        assertm(dim[blocked_dimensions[d]] % subblock_dim == 0, "Dimension not exactly divisible by subblock size!");
+        assertm(dim[blocked_dimensions[d]] % subblock_dim == 0, "Dimension not exactly divisible by block size!");
         spacetime_nid *= dim[blocked_dimensions[d]];
     }
 

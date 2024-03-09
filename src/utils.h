@@ -29,3 +29,7 @@ std::complex<double> vec_norm(const std::complex<double> *x, const int dim);
 // 2.1 matrix-vector product y = Ax (A is row major)
 void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::complex<double> *y, const int dim);
 
+// 2.2 matrix-matrix multiplication C = A * B
+void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std::complex<double> *C, const int dim);
+
+

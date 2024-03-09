@@ -12,43 +12,33 @@
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
-
-class Boson {
+class Field {
 public:
-    // initialise boson field memory layout, fastest to slowest
-    explicit Boson (int const *index_dim);
+    Field(){};
 
-    /*Query Boson information*/
-    // get dimensions
-    int* get_dim() {return dim;}
+    // Query Field information
+    int* get_dim(); // get dimensions
+    int field_size(); // get length of u_field
+    std::complex<double> val_at(int const *index); // retrieve field value at an index
 
-    // get length of u_field
-    int field_size() {return mesh.get_size();}
 
-    // retrieve field value at an index
-    std::complex<double> val_at(int const *index);
+    ~Field();
 
-    ~Boson();
-
-private:
-    int dim[7] = {0}; // dimensions
-    Mesh mesh; // for index computation
-    std::complex<double> *u_field;  // boson field values
+    int dim[10]  = {0};
+    int nindex{};
+    Mesh mesh;
+    std::complex<double> *field{};
 };
 
-class Fermion {
+class Boson : public::Field {
+public:
+    // initialise boson field memory layout, slowest to fastest
+    explicit Boson (int const *index_dim);
+};
+
+class Fermion : public Field{
 public:
     explicit Fermion(int const *index_dim);
-
-    // retrive field value at an index
-    std::complex<double> val_at(int const *index);
-
-    ~Fermion();
-
-private:
-    int dim[5] = {0}; // dimensions
-    Mesh mesh;
-    std::complex<double> *phi_field; // fermion field values
 };
 
 

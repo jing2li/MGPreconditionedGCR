@@ -20,4 +20,6 @@ add_executable(MGPreconditionedGCR main.cpp
         utils.cpp
         Mesh.cpp
         Mesh.h
+        Operator.cpp
+        Operator.h
 )

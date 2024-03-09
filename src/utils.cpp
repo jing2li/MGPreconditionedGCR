@@ -55,3 +55,13 @@ void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::
         }
     }
 }
+
+void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std::complex<double> *C, const int dim) {
+    for (int i=0; i<dim; i++) {
+        for (int j=0; j<dim; j++) {
+            for (int k=0; k<dim; k++) {
+                C[i*dim + j] = A[i*dim + k] * B[k*dim + j];
+            }
+        }
+    }
+}
