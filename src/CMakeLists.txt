@@ -22,4 +22,10 @@ add_executable(MGPreconditionedGCR main.cpp
         Mesh.h
         Operator.cpp
         Operator.h
+        EigenSolver.cpp
+        EigenSolver.h
+        Parse.cpp
+        Sparse.cpp
+        Sparse.h
+        Parse.h
 )
