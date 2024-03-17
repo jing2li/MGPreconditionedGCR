@@ -45,6 +45,14 @@ std::complex<double> vec_norm(const std::complex<double> *x, const int dim) {
     return sum;
 }
 
+// 1.5 normalise
+void vec_normalise(std::complex<double> *x, const int dim) {
+    std::complex<double> const factor = 1./vec_norm(x, dim);
+    for (int i=0; i<dim; i++) {
+        x[i] = factor * x[i];
+    }
+}
+
 
 // 2.1 matrix-vector product y = Ax (A is row major)
 void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::complex<double> *y, const int dim) {
@@ -60,9 +68,11 @@ void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::
 void mat_mult(const std::complex<double> *A, const std::complex<double> *B, std::complex<double> *C, const int dim) {
     for (int i=0; i<dim; i++) {
         for (int j=0; j<dim; j++) {
+            std::complex<double> sum(0,0);
             for (int k=0; k<dim; k++) {
-                C[i*dim + j] = A[i*dim + k] * B[k*dim + j];
+                sum += A[i*dim + k] * B[k*dim + j];
             }
+            C[i*dim + j] = sum;
         }
     }
 }

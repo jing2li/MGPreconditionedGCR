@@ -24,7 +24,7 @@ private:
     std::complex<double> *P; // prolongator
     GCR gcr_solver; // smoother
 
-    int levels; // levels of coarsening
+    int levels; // levels incl. the innermost
     int subblock_dim; // dimension of subblocks in geometric coarsening
     int eigen_dim; // nuber of eigenvectors in algebraic coarsening
     int *map; //mapping from local to global

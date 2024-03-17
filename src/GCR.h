@@ -6,7 +6,7 @@
 #define MGPRECONDITIONEDGCR_GCR_H
 
 #include <complex>
-#include "Operator.h"
+#include "Dense.h"
 
 
 // for solving Ax = rhs

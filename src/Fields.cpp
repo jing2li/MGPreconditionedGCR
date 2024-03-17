@@ -17,6 +17,10 @@ int *Field::get_dim() {
     return dim;
 }
 
+int Field::get_ndim() {
+    return nindex;
+}
+
 int Field::field_size() {
     return mesh.get_size();
 }
@@ -41,9 +45,55 @@ std::complex<double> Field::val_at(const int *index) {
     return field[ind];
 }
 
-Field::~Field() {
-//    free(field);
+std::complex<double> Field::val_at(const int location) {
+    assertm(location < field_size(), "Field memory access out of bound!");
+
+    return field[location];
 }
+
+void Field::mod_val_at(const int *index, std::complex<double> const new_value) {
+    const int ind = Mesh::ind_loc(index, dim, nindex);
+    field[ind] = new_value;
+}
+
+void Field::mod_val_at(int const location, std::complex<double> const new_value) {
+    field[location] = new_value;
+}
+
+Field::~Field() {
+    free(field);
+}
+
+Field Field::operator+(Field f) {
+    assertm(this->field_size() == f.field_size(), "Lengths of two fields do not match!");
+    int* f_dim = f.get_dim();
+    for (int i=0; i<10; i++) {
+        assertm(dim[i] == f_dim[i], "Dimension arrangement of two fields do not match!");
+    }
+
+    Field output(dim, nindex);
+    for (int i=0; i<this->field_size(); i++) {
+        output.mod_val_at(i, field[i] + f.val_at(i));
+    }
+
+    return output;
+}
+
+Field Field::operator*(Field f) {
+    assertm(this->field_size() == f.field_size(), "Lengths of two fields do not match!");
+    int* f_dim = f.get_dim();
+    for (int i=0; i<10; i++) {
+        assertm(dim[i] == f_dim[i], "Dimension arrangement of two fields do not match!");
+    }
+
+    Field output(dim, nindex);
+    for (int i=0; i<this->field_size(); i++) {
+        output.mod_val_at(i, conj(field[i]) * f.val_at(i));
+    }
+
+    return output;
+}
+
 
 Boson::Boson(int const* index_dim) {
     // copy to dim

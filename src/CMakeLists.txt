@@ -20,8 +20,8 @@ add_executable(MGPreconditionedGCR main.cpp
         utils.cpp
         Mesh.cpp
         Mesh.h
-        Operator.cpp
-        Operator.h
+        Dense.cpp
+        Dense.h
         EigenSolver.cpp
         EigenSolver.h
         Parse.cpp

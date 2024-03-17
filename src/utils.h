@@ -25,6 +25,9 @@ void vec_copy(const std::complex<double> *source, std::complex<double> *destinat
 // 1.4 norm
 std::complex<double> vec_norm(const std::complex<double> *x, const int dim);
 
+// 1.5 normalise
+void vec_normalise(std::complex<double> *x, const int dim);
+
 
 // 2.1 matrix-vector product y = Ax (A is row major)
 void mat_vec(const std::complex<double> *A, const std::complex<double> *x, std::complex<double> *y, const int dim);

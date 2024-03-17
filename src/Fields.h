@@ -14,20 +14,29 @@
 
 class Field {
 public:
-    Field() {};
-    Field(const int* dimensions, int ndim);
+    Field() = default;
+    Field(const int* dimensions, int ndim); // uninitialised field
     void init_rand(); // random initialisation of field to value [-1, 1]
 
     // Query Field information
     int* get_dim(); // get dimensions
+    int get_ndim(); // get number of dimensions;
     int field_size(); // get length of u_field
     std::complex<double> val_at(int const *index); // retrieve field value at an index
+    std::complex<double> val_at(int const location);
+    void mod_val_at(int const *index, std::complex<double> const new_value); // modify field value at index
+    void mod_val_at(const int location, std::complex<double> const new_value); // modify field value at memory location
+
+    // Operations overload
+    Field operator+(Field f);
+    Field operator*(Field f); // inner produce elementwise left.dagger() * right
 
 
     ~Field();
 
+protected:
     int dim[10]  = {0};
-    int nindex{};
+    int nindex = 0;
     Mesh mesh;
     std::complex<double> *field{};
 };
