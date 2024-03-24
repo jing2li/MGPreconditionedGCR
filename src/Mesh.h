@@ -26,8 +26,8 @@ public:
 
 
     // retrieve values
-    int get_size() {return size;};
-    int get_ndim() {return ndim;};
+    [[nodiscard]] int get_size() const {return size;};
+    [[nodiscard]] int get_ndim() const {return ndim;};
     int* get_dims() {return dim;};
 
     ~Mesh();

@@ -23,7 +23,7 @@ std::complex<double> vec_innprod(const std::complex<double> *x, const std::compl
 void vec_copy(const std::complex<double> *source, std::complex<double> *destination, int count);
 
 // 1.4 norm
-std::complex<double> vec_norm(const std::complex<double> *x, const int dim);
+std::complex<double> vec_squarednorm(const std::complex<double> *x, const int dim);
 
 // 1.5 normalise
 void vec_normalise(std::complex<double> *x, const int dim);

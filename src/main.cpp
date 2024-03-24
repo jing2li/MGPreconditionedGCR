@@ -5,39 +5,113 @@
 #include "EigenSolver.h"
 #include "utils.h"
 #include "Parse.h"
-#include "Sparse.h"
+#include "Operator.h"
+#include <random>
 
 void test_fields();
-void test_GCR(const int dim);
+void test_LA();
+void test_GCR(const int dim, const int truncation);
 void test_EigenSolver(const int dim);
 
 
 int main() {
     // test with laplace operator
-    //test_GCR(20);
+    test_GCR(20, 20);
 
-    //test_EigenSolver(4);
+    // test_EigenSolver(4);
 
-    Sparse mat = read_data();
+    // Sparse mat = read_data();
 
+    //test_fields();
+    //test_LA();
 
     return 0;
 }
 
 
 void test_fields() {
-    // test fields
-    int const dim[7] = {4, 8, 3, 3, 2, 2, 2};
-    Boson b1(dim);
+    std::cout<< "--------------------------------------------------------\n";
+    std::cout<< "Testing functions in Fields:\n";
+    std::cout<< "--------------------------------------------------------\n" << "a. Field addition and subtraction\n" <<
+    "\tAddition (+): ";
+    std::complex<double> vector[20], vector1[20];
+    for (int i=0; i<20; i++) {
+        srand(i * 200);
+        vector[i] = std::complex<double>(rand()%1000/1000., rand()%1000/1000.);
+        srand(i * 300);
+        vector1[i] = std::complex<double>(rand()%2000/2000., rand()%2000/2000.);
+    }
+    int dims[1] = {20};
+    Field field(dims, 1, vector);
+    Field field1(dims, 1, vector1);
 
-    for (int i=0; i<dim[6]; i++) {
-        for (int j=0; j<dim[5]; j++){
-            for (int k=0; k<dim[4]; k++){
-                int index[7] = {1, 1, 1, 1, k, j, i};
-                std::cout << b1.val_at(index) << " ";
-            }
+    Field result = field + field1;
+    std::complex<double> exact[20];
+    vec_add(1., vector1, 1., vector, exact, 20);
+    bool pass=true;
+    for(int i=0; i<20; i++) {
+        if(norm(exact[i]-result.val_at(i)) > 1e-13) {
+            pass=false;
+            break;
         }
     }
+    if (pass) std::cout << "PASSED";
+    else std::cout << "FAILED";
+
+    std::cout<<"\n\tSubtraction (-): ";
+
+    result = field - field1;
+    vec_add(1., vector, -1., vector1, exact, 20);
+
+    pass = true;
+    for(int i=0; i<20; i++) {
+        if(norm(exact[i]-result.val_at(i)) > 1e-13) {
+            pass=false;
+            break;
+        }
+    }
+    if (pass) std::cout << "PASSED";
+    else std::cout << "FAILED";
+
+    std::cout<<"\nb. Inner product\n" << "\tInner product of 2 fields (.dot()):\t";
+    std::complex<double> resu = field.dot(field1);
+    std::complex<double> reference = vec_innprod(vector, vector1, 20);
+    if(norm(reference-resu) > 1e-13) std::cout << "FAILED";
+    else std::cout << "PASSED";
+
+
+    std::cout << "\n\tComputation of norm (.squarednorm()):\t";
+    resu = field.squarednorm();
+    reference = vec_squarednorm(vector, 20);
+    if(norm(reference-resu) > 1e-13) std::cout << "FAILED";
+    else std::cout << "PASSED";
+
+    printf("\nc. Value assignement\n\tAssignment operator (=):\t");
+    field1 = field;
+    pass = true;
+    for(int i=0; i<20; i++) {
+        if(norm(field1.val_at(i)-field.val_at(i)) > 1e-13) {
+            pass=false;
+            break;
+        }
+    }
+    if (pass) std::cout << "PASSED";
+    else std::cout << "FAILED";
+
+    printf("\n\tCopy constructor: ");
+    Field field2(field);
+    pass = true;
+    for(int i=0; i<20; i++) {
+        if(norm(field2.val_at(i)-field.val_at(i)) > 1e-13) {
+            pass=false;
+            break;
+        }
+    }
+    if (pass) std::cout << "PASSED";
+    else std::cout << "FAILED";
+
+
+    std::cout<< "\n--------------------------------------------------------\n";
 }
 
 void test_EigenSolver(const int dim) {
@@ -67,11 +141,11 @@ void test_EigenSolver(const int dim) {
         mat_vec(A, q + i*dim, tmp, dim); // tmp = Ax
         std::complex<double> const eigenvalue = vec_innprod(q + i*dim, tmp, dim);
         vec_add(1., tmp, -eigenvalue, q+i*dim, tmp, dim); //tmp = Ax - eigenvalue * x
-        if ( vec_norm(tmp,10).real() < 1e-12) {
+        if ( vec_squarednorm(tmp,10).real() < 1e-12) {
            std::cout<<"is an eigenvector\n";
         }
         else{
-            printf("Deviates by %f\n", vec_norm(tmp, dim).real());
+            printf("Deviates by %f\n", vec_squarednorm(tmp, dim).real());
         }
     }
 
@@ -93,11 +167,11 @@ void test_EigenSolver(const int dim) {
         mat_vec(A, tmp, tmp1, dim); // tmp = Ax
         std::complex<double> const eigenvalue = vec_innprod(tmp, tmp1, dim);
         vec_add(1., tmp1, -eigenvalue, tmp, tmp, dim); //tmp = Ax - eigenvalue * x
-        if ( vec_norm(tmp,10).real() < 1e-12) {
+        if ( vec_squarednorm(tmp,10).real() < 1e-12) {
             std::cout<<"is an eigenvector\n";
         }
         else{
-            printf("Deviates by %f\n", vec_norm(tmp, dim).real());
+            printf("Deviates by %f\n", vec_squarednorm(tmp, dim).real());
         }
     }
 
@@ -107,12 +181,12 @@ void test_EigenSolver(const int dim) {
 }
 
 
-void test_GCR(const int dim) {
+void test_GCR(const int dim, const int truncation) {
     std::cout <<"Testing GCR solver of dimension "<< dim <<" x " << dim << std::endl;
     // randomise A
     std::complex<double> *A = new std::complex<double> [dim*dim];
-    //std::complex<double> *rhs = new std::complex<double>[dim];
-    //std::complex<double> *x = new std::complex<double>[dim];
+    std::complex<double> *rhs_base = new std::complex<double>[dim];
+    std::complex<double> *x_base = new std::complex<double>[dim];
 
     for (int i=0; i<dim; i++)
     for(int j=0; j<dim; j++){
@@ -123,28 +197,61 @@ void test_GCR(const int dim) {
         //A[i*dim + j] = std::complex<double>(rand()%1000/1000., 0);
     }
 
-    Operator M(A, dim);
+    for (int i=0; i<dim; i++) {
+        rhs_base[i] = std::complex<double>( rand() %1000/1000., 0);
+        x_base[i] = std::complex<double>(rand() %1000/1000., 0);
+    }
 
-    free(A);
+
+
+    printf("Test base solver: \n");
+    GCR gcr_base(A, dim);
+    gcr_base.solve(rhs_base, x_base, 1e-12, 100, truncation);
+
+
+
     int dims[1] = {dim};
+
     Field rhs(dims, 1);
-    rhs.init_rand();
+    for (int i=0; i<dim; i++) {
+        rhs.mod_val_at(i, rhs_base[i]);
+    }
+
+    printf("Test sparse solver: \n");
+    auto *S = new Sparse(dim, dim, A);
+    Field x_sparse(dims, 1);
+    x_sparse.init_rand();
+    GCR gcr_sparse(S);
+    gcr_sparse.solve(rhs, x_sparse, 1e-12, 100, truncation);
+    delete S;
+    printf("Test dense solver: \n");
+    auto *M = new Dense(A, dim);
+
+
 
     Field x(dims, 1);
     x.init_rand();
 
-    /*
-    for (int i=0; i<dim; i++) {
-        rhs[i] = std::complex<double>(rand()%1000/1000., 0);
-        //rhs[i] = std::complex<double>(0,0);
-        x[i] = std::complex<double>(rand()%1000/100., 0);
-    }*/
-
     GCR gcr(M);
-    gcr.solve(rhs, x, 1e-12, 100, 5);
-    std::cout<< "GCR solution:\t";
+    gcr.solve(rhs, x, 1e-12, 100, truncation);
+    delete M;
+    std::cout<< "GCR_basic solution:\t";
     for (int i=0; i<dim; i++){
-        std::cout << x.field[i] << " ";
+        std::cout << x_base[i] << " ";
+    }
+    std::cout<<"\n";
+    delete []x_base;
+    delete []rhs_base;
+
+    std::cout<< "GCR_dense solution:\t";
+    for (int i=0; i<dim; i++){
+        std::cout << x.val_at(i) << " ";
+    }
+    std::cout<<"\n";
+
+    std::cout<< "GCR_sparse solution:\t";
+    for (int i=0; i<dim; i++){
+        std::cout << x_sparse.val_at(i) << " ";
     }
     std::cout<<"\n";
 
@@ -152,18 +259,20 @@ void test_GCR(const int dim) {
     Eigen::MatrixXcd A_eigen(dim, dim);
     for (int i=0; i<dim; i++) {
         for (int j=0; j<dim; j++){
-            A_eigen(i, j) = M.mat[i*dim + j];
+            A_eigen(i, j) = A[i*dim + j];
         }
     }
+
+    free(A);
     Eigen::VectorXcd rhs_eigen(dim);
     for (int i=0; i<dim; i++) {
-        rhs_eigen(i) = rhs.field[i];
+        rhs_eigen(i) = rhs.val_at(i);
     }
     Eigen::FullPivLU<Eigen::MatrixXcd> lu_decomp(A_eigen);
     auto exact_sol = lu_decomp.solve(rhs_eigen);
     Eigen::VectorXcd gcr_sol_eigen(dim);
     for (int i=0; i<dim; i++) {
-        gcr_sol_eigen(i) = x.field[i];
+        gcr_sol_eigen(i) = x.val_at(i);
     }
 
     std::cout<<"LU solution:\t";
@@ -172,6 +281,184 @@ void test_GCR(const int dim) {
     }
     std::cout<<std::endl;
 
-    std::cout << "Relative error compared to Eigen LU solver = " << (exact_sol-gcr_sol_eigen).norm() <<std::endl;
+    std::cout << "Relative error compared to Eigen LU solver = " << (exact_sol-gcr_sol_eigen).norm()/exact_sol.norm() <<std::endl;
+
+}
+
+
+void test_LA() {
+    std::cout<< "Testing Linear Algebra: \n";
+    std::cout<< "--------------------------------------------------------\n";
+    std::cout<< "(1) Dense Class\n";
+    std::cout<< "a. Matrix vector multiplication\n";
+    std::complex<double> ref[100] = {0.}; // 10 by 10 matrix
+    std::complex<double> vector[10];
+
+    for (int i=0; i<10; i++) {
+        ref[i*10 + i] = 1.0;
+        srand(i*100);
+        vector[i] = std::complex<double> (rand()%1000 / 1000., rand()%1000 / 1000.);
+    }
+    std::cout << "\tMultiplication with Identity:\t";
+    Dense id(ref, 10);
+    int dims[1] = {10};
+    Field field(dims, 1, vector);
+    Field result(id(field));
+
+    bool pass = true;
+    for (int i=0; i<10; i++) {
+        if(norm((result.val_at(i)-vector[i])) > 1e-13) {
+            pass = false;
+            break;
+        }
+    }
+    if(pass)
+        std::cout<< "PASSED" <<std::endl;
+    else
+        std::cout<<"FAILED" <<std::endl;
+
+    std::cout<< "\tMultiplication with random matrix:\t";
+    for (int i=0; i<10; i++) {
+       for (int j=0; j<10; j++) {
+           srand(i*100);
+           ref[i*10+j] = std::complex<double>(rand()%1000/1000.,rand()%1000/1000.);
+       }
+       srand(i*300);
+       vector[i] = std::complex<double>(rand()%1000/1000.,rand()%1000/1000.);
+    }
+    Dense dense1(ref, 10);
+    Field field1(dims, 1, vector);
+    result = dense1(field1);
+    std::complex<double> exact[10];
+    mat_vec(ref, vector, exact, 10);
+
+    pass = true;
+    for (int i=0; i<10; i++) {
+        if(norm((result.val_at(i)-exact[i])) > 1e-13) {
+            pass = false;
+            break;
+        }
+    }
+    if(pass)
+        std::cout<< "PASSED" <<std::endl;
+    else
+        std::cout<<"FAILED" <<std::endl;
+
+
+    std::cout<< "b. Matrix addition\n" << "\tRandom matrix addition:\t";
+    std::complex<double> ref1[100];
+    for (int i=0; i<100; i++) {
+        srand(i*300);
+        ref1[i] = std::complex<double>(rand()%1000/1000.,rand()%1000/1000.);
+    }
+    Dense dense2(ref1, 10);
+    Dense dense3 = dense1 + dense2;
+    std::complex<double> ref2[100];
+    vec_add(1., ref, 1., ref1, ref2, 100);
+
+    pass = true;
+    for (int i=0; i<10; i++) {
+        if(norm((result.val_at(i)-exact[i])) > 1e-13) {
+            pass = false;
+            break;
+        }
+    }
+    if(pass)
+        std::cout<< "PASSED" <<std::endl;
+    else
+        std::cout<<"FAILED" <<std::endl;
+
+
+    std::cout<< "--------------------------------------------------------\n";
+    std::cout<< "(2) Sparse Class\n";
+    std::cout<< "b. Matrix vector multiplication\n" << "\tMultiplication with Identity:\t";
+    for (int i=0; i<100; i++) {
+        if (i%11 == 0) ref[i] = 1.;
+        else ref[i] = 0.;
+    }
+    Sparse sparse_id(10, 10, ref);
+    result = sparse_id(field1);
+
+    pass = true;
+    for (int i=0; i<10; i++) {
+        if(norm((result.val_at(i)-field1.val_at(i))) > 1e-13) {
+            pass = false;
+            break;
+        }
+    }
+    if(pass)
+        std::cout<< "PASSED" <<std::endl;
+    else
+        std::cout<<"FAILED" <<std::endl;
+
+
+
+    std::cout<<"\tMultiplication with random matrix:\t";
+    std::pair<std::complex<double>, std::pair<int, int>> triplets[20];
+    std::complex<double> sparse_mat[100] = {0.};
+    for (int i=0; i<10; i++) {
+        srand(i*200);
+        std::pair<int, int> const index(i, i);
+        triplets[2*i] = std::pair<std::complex<double>, std::pair<int, int>> (std::complex<double>(rand()%200/200., rand()%300/300.), index);
+        sparse_mat[index.first*10+index.second] = triplets[2*i].first;
+
+        srand(i*100);
+        std::pair<int, int> const index1((i+2)%10, i);
+        triplets[2*i+1] = std::pair<std::complex<double>, std::pair<int, int>> (std::complex<double>(rand()%200/200., rand()%300/300.), index1);
+        sparse_mat[index1.first*10+index1.second] = triplets[2*i+1].first;
+    }
+
+
+    Sparse sparse_rand(10, 10, triplets, 20);
+    Sparse sparse_control(10,10, sparse_mat);
+    result = sparse_rand(field1);
+    mat_vec(sparse_mat, vector, exact, 10);
+
+    pass = true;
+    for (int i=0; i<10; i++) {
+        if(norm((result.val_at(i)-exact[i])) > 1e-13) {
+            pass = false;
+            break;
+        }
+    }
+    if(pass)
+        std::cout<< "PASSED" <<std::endl;
+    else
+        std::cout<<"FAILED" <<std::endl;
+
+    std::cout << "b. Constructor\n";
+    std::cout << "\tArray to Sparse constructor:\t";
+    pass = true;
+    int count = 0;
+    for (int i=0; i<100; i++) {
+        if (sparse_mat[i]!= 0.) {
+            if(sparse_mat[i] == sparse_control.val_at(count)) {
+                count ++;
+            }
+            else {
+                pass = false;
+                break;
+            }
+        }
+    }
+    if(pass)
+        std::cout<< "PASSED" <<std::endl;
+    else
+        std::cout<<"FAILED" <<std::endl;
+
+
+    std::cout << "\tTriplet to Sparse constructor:\t";
+    pass = true;
+    for (int i=0; i<20; i++) {
+        if (norm((sparse_rand.val_at(i) - sparse_control.val_at(i))) > 1e-13) {
+            pass = false;
+            break;
+        }
+    }
+    if(pass) std::cout<< "PASSED" <<std::endl;
+    else std::cout<<"FAILED" <<std::endl;
+
+    std::cout<< "--------------------------------------------------------\n";
+
 
 }

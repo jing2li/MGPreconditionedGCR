@@ -37,7 +37,7 @@ void vec_copy(const std::complex<double> *source, std::complex<double> *destinat
 }
 
 // 1.4 norm
-std::complex<double> vec_norm(const std::complex<double> *x, const int dim) {
+std::complex<double> vec_squarednorm(const std::complex<double> *x, const int dim) {
     std::complex<double> sum(0.,0.);
     for (int i=0; i<dim; i++) {
         sum += conj(x[i]) * x[i];
@@ -47,7 +47,7 @@ std::complex<double> vec_norm(const std::complex<double> *x, const int dim) {
 
 // 1.5 normalise
 void vec_normalise(std::complex<double> *x, const int dim) {
-    std::complex<double> const factor = 1./vec_norm(x, dim);
+    std::complex<double> const factor = 1./std::sqrt(vec_squarednorm(x, dim));
     for (int i=0; i<dim; i++) {
         x[i] = factor * x[i];
     }

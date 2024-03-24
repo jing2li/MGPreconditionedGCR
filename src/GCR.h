@@ -6,26 +6,29 @@
 #define MGPRECONDITIONEDGCR_GCR_H
 
 #include <complex>
-#include "Dense.h"
-
+#include <utility>
+#include "Operator.h"
 
 // for solving Ax = rhs
 class GCR {
 public:
     // load LSE that needs to be solved
-    GCR(){A = nullptr; dim=0;};
+    GCR()= default;
     GCR(const std::complex<double> *matrix, const int dimension);
-    GCR(Operator M);
+    template <class OPERATOR>
+    GCR(OPERATOR *M) : A_operator(M), dim(A_operator->get_dim()) {};
 
 
     // solve for Ax = rhs
     void solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol, const int max_iter, const int truncation);
-    void solve(const Field rhs, const Field x, const double tol, const int max_inter, const int truncation);
+    void solve(const Field& rhs, Field& x, const double tol, const int max_inter, const int truncation);
 
     ~GCR();
 private:
-    std::complex<double> *A;
-    int dim; // dimension of regular matrix A
+    std::complex<double> *A = nullptr;
+    Operator* A_operator;
+
+    int dim = 0; // dimension of regular matrix A
 };
 
 

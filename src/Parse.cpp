@@ -29,5 +29,5 @@ Sparse read_data(){
     }
     file.close();
 
-    return {rows, triplets, elements};
+    return {rows, cols, triplets, elements};
 }

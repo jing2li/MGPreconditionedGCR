@@ -1,35 +1,65 @@
 //
-// Created by jingjingli on 15/03/24.
-// Sparse matrix in CRS format
+// Created by jingjingli on 22/03/24.
 //
 
-#ifndef MGPRECONDITIONEDGCR_SPARSE_H
-#define MGPRECONDITIONEDGCR_SPARSE_H
+#ifndef MGPRECONDITIONEDGCR_OPERATOR_H
+#define MGPRECONDITIONEDGCR_OPERATOR_H
 
-#include <complex>
 #include "Fields.h"
 
-class Sparse {
+
+// an object that acts on a field
+class Operator {
+public:
+    virtual Field operator()(const Field &) const = 0;
+
+    [[nodiscard]] int get_dim() const {return dim;};
+
+protected:
+    int dim = 0;
+};
+
+
+class Dense : public Operator {
+public:
+    Dense()= default;
+    Dense(std::complex<double> * matrix, int const dimension);
+
+
+    // dense matrix linear algebra
+    Dense operator+(const Dense& B); // matrix addition
+    Dense operator*(const Dense& B); // matrix multiplication
+    Field operator()(const Field& f) const override; // matrix acting on field
+    Dense dagger();
+
+
+    ~Dense();
+
+private:
+    std::complex<double> *mat = NULL;
+};
+
+
+class Sparse : public Operator {
 public:
     Sparse()= default;
     explicit Sparse(int rows){ROW = (int *) malloc(sizeof(int) *(rows+1)); nrow=rows;}; //empty constructor
     Sparse(Sparse const &matrix);
     // Dense -> Sparse
-    Sparse(int rows, int cols, std::complex<double> *dense);
+    Sparse(int rows, int cols, std::complex<double> *matrix);
     // unordered Triplet -> Sparse
     Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<int, int>> *triplets, int triplet_length);
 
 
     // Query Sparse matrix information
     [[nodiscard]] int get_nrow() const {return nrow;}; // number of rows
-    [[nodiscard]] int get_ncol() const {return ncol;}; // number of columnes
     [[nodiscard]] int get_nnz() const {return ROW[nrow];}; // number of non-zero values
     [[nodiscard]] std::complex<double> val_at(int const row, int const col) const; // value at (row, col)
     [[nodiscard]] std::complex<double> val_at(int location) const; // value at memory location
 
 
     // Sparse matrix linear algebra
-    Field operator()(Field f); // matrix vector multiplication
+    Field operator()(Field const &f) const override; // matrix vector multiplication
     void dagger();
 
 private:
@@ -37,7 +67,6 @@ private:
     int *COL=NULL; // column index of each value
     int *ROW=NULL; // location where the row starts
     int nrow=0;
-    int ncol=0;
 };
 
-#endif //MGPRECONDITIONEDGCR_SPARSE_H
+#endif //MGPRECONDITIONEDGCR_OPERATOR_H

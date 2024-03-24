@@ -122,7 +122,7 @@ void MG::solve(const std::complex<double> *rhs, std::complex<double> *x, const d
         // res = rhs - Ax
         mat_vec(A, x, res, dim);
         vec_add(one, rhs, -one, res, res, dim);
-    } while (iter_count < max_iter && vec_norm(res, dim).real() > tol);
+    } while (iter_count < max_iter && vec_squarednorm(res, dim).real() > tol);
 
     free(res);
 }

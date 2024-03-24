@@ -8,7 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <complex>
-#include "Sparse.h"
+#include "Operator.h"
 
 Sparse read_data();
 

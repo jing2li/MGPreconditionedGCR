@@ -15,27 +15,34 @@
 class Field {
 public:
     Field() = default;
+    Field(Field const &f);
     Field(const int* dimensions, int ndim); // uninitialised field
+    Field(const int *dimensions, int ndim, std::complex<double> *field_init); // field with initialisation
     void init_rand(); // random initialisation of field to value [-1, 1]
+    void set_zero();
 
     // Query Field information
-    int* get_dim(); // get dimensions
-    int get_ndim(); // get number of dimensions;
-    int field_size(); // get length of u_field
-    std::complex<double> val_at(int const *index); // retrieve field value at an index
-    std::complex<double> val_at(int const location);
+    [[nodiscard]] int* get_dim() const; // get dimensions
+    [[nodiscard]] int get_ndim() const; // get number of dimensions;
+    [[nodiscard]] int field_size() const; // get length of u_field
+    std::complex<double> val_at(int const *index) const; // retrieve field value at an index
+    std::complex<double> val_at(int const location) const;
     void mod_val_at(int const *index, std::complex<double> const new_value); // modify field value at index
     void mod_val_at(const int location, std::complex<double> const new_value); // modify field value at memory location
 
-    // Operations overload
-    Field operator+(Field f);
-    Field operator*(Field f); // inner produce elementwise left.dagger() * right
+    // Operations
+    Field operator+(const Field& f) const;
+    Field operator-(const Field& f) const;
+    [[nodiscard]] std::complex<double> dot(const Field& f) const; // inner produce elementwise left.dagger() * right
+    [[nodiscard]] double squarednorm() const;
+    Field operator*(std::complex<double> a) const; // scalar multiplication
+    Field &operator=(const Field& f) noexcept;
 
 
     ~Field();
 
 protected:
-    int dim[10]  = {0};
+    int *dim = {nullptr};
     int nindex = 0;
     Mesh mesh;
     std::complex<double> *field{};
