@@ -225,7 +225,7 @@ void test_GCR(const int dim, const int truncation) {
     Field x_sparse(dims, 1);
     x_sparse.init_rand();
     GCR gcr_sparse(S);
-    gcr_sparse.solve(rhs, x_sparse, 1e-12, 100, truncation);
+    gcr_sparse.solve(rhs, x_sparse, {truncation, 0, 100, 1e-12});
     delete S;
     printf("Test dense solver: \n");
     auto *M = new Dense(A, dim);
@@ -236,7 +236,7 @@ void test_GCR(const int dim, const int truncation) {
     x.init_rand();
 
     GCR gcr(M);
-    gcr.solve(rhs, x, 1e-12, 100, truncation);
+    gcr.solve(rhs, x, {truncation, 0, 100, 1e-12});
     delete M;
     std::cout<< "GCR_basic solution:\t";
     for (int i=0; i<dim; i++){
@@ -478,6 +478,6 @@ void test_data() {
     Field x(dims, 1);
     x.init_rand();
 
-    gcr.solve(rhs, x, 1e-13, 100, 10);
+    gcr.solve(rhs, x, {10, 0, 100, 1e-12});
     delete mat;
 };

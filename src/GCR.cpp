@@ -94,9 +94,19 @@ void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const 
     free(ps);
 }
 
-void GCR::solve(const Field& rhs, Field& x, const double tol, const int max_iter, const int truncation) {
+void GCR::solve(const Field& rhs, Field& x, GCR_param param) {
     assertm(rhs.field_size() == dim, "Field dimension does not match with Operator!");
     assertm(x.field_size() == dim, "x dimension does not match with Operator!");
+    if(param.truncation==0 && param.restart == 0) {
+        printf("WARNING: Full GCR solve could incur high memory usage!");
+    }
+
+    // loading parameters
+    int truncation, restart;
+    if(param.truncation) truncation = param.truncation;
+    else truncation = rhs.field_size();
+    if (param.restart) restart = param.restart;
+    else restart = param.max_iter;
 
     //initialise 4 intermediate vectors
     Field Ax = (*A_operator)(x);
@@ -154,13 +164,21 @@ void GCR::solve(const Field& rhs, Field& x, const double tol, const int max_iter
 
         printf("Step %d residual norm = %.15f\n", iter_count, std::sqrt(r.squarednorm()));
 
-    } while (r.squarednorm() > tol*tol && iter_count<max_iter);
+
+        // restart: wipe all stored directions
+        if(iter_count%restart == 0) {
+            for(int i=0; i<truncation; i++) {
+                Aps[i].set_zero();
+                ps[i].set_zero();
+            }
+        }
+    } while (r.squarednorm() > param.tol*param.tol && iter_count<param.max_iter);
 
     free(Aps);
     free(ps);
 
-    if (iter_count==max_iter)
-        printf("GCR did not converge after %d steps! Residual norm = %f\n", max_iter, std::sqrt(r.squarednorm()));
+    if (iter_count==param.max_iter)
+        printf("GCR did not converge after %d steps! Residual norm = %f\n", param.max_iter, std::sqrt(r.squarednorm()));
 
 }
 
