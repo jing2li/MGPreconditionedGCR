@@ -77,22 +77,8 @@ void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const 
         vec_copy(Ap, Aps + (iter_count%truncation) * dim, dim);
         vec_copy(p, ps + (iter_count%truncation) * dim, dim);
 
-        /* debugging
-        std::complex<double> *A_dagger = (std::complex<double> *) malloc(dim * dim * sizeof(std::complex<double>));
-        std::complex<double> *AdA = (std::complex<double> *) malloc(dim * dim * sizeof(std::complex<double>));
-        std::complex<double> *AdAr = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
 
-        mat_dagger(A, A_dagger, dim);
-        mat_mult(A_dagger, A, AdA, dim);
-        mat_vec(AdA, r, AdAr, dim);
-
-
-        free(AdAr);
-        free(A_dagger);
-        free(AdA);
-        */
-
-        printf("Step %d residual norm = %f\n", iter_count, vec_squarednorm(r, dim).real());
+        printf("Step %d residual norm = %f\n", iter_count, std::sqrt(vec_squarednorm(r, dim).real()));
 
     } while (vec_squarednorm(r, dim).real() > tol && iter_count<max_iter);
 
@@ -166,15 +152,15 @@ void GCR::solve(const Field& rhs, Field& x, const double tol, const int max_iter
         Aps[iter_count%truncation] = Ap;
         ps[iter_count%truncation] = p;
 
-        printf("Step %d residual norm = %f\n", iter_count, r.squarednorm());
+        printf("Step %d residual norm = %.15f\n", iter_count, std::sqrt(r.squarednorm()));
 
-    } while (r.squarednorm() > tol && iter_count<max_iter);
+    } while (r.squarednorm() > tol*tol && iter_count<max_iter);
 
     free(Aps);
     free(ps);
 
     if (iter_count==max_iter)
-        printf("GCR did not converge after %d steps! Residual norm = %f\n", max_iter, (r.dot(r)).real());
+        printf("GCR did not converge after %d steps! Residual norm = %f\n", max_iter, std::sqrt(r.squarednorm()));
 
 }
 

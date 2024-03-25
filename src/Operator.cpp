@@ -2,6 +2,7 @@
 // Created by jingjingli on 22/03/24.
 //
 
+#include <algorithm>
 #include "Operator.h"
 #include "utils.h"
 #define one std::complex<double>(1., 0.)
@@ -118,10 +119,47 @@ Sparse::Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<int
     nrow=rows;
     dim=cols;
     ROW = (int *) malloc(sizeof(int) *(rows+1));
-    ROW[rows] = triplet_length;
     COL = (int *) malloc(sizeof(int) *triplet_length);
     VAL = (std::complex<double> *) calloc(triplet_length, sizeof(std::complex<double>));
 
+    // sort triplets row major
+    std::sort(triplets, triplets+triplet_length, [&](auto &left, auto &right) {
+        return (left.second.first * nrow + left.second.second) < (right.second.first * nrow + right.second.second);
+    });
+
+    // load first value
+    ROW[0] = 0;
+    int row_count = 0;
+    VAL[0] = triplets[0].first;
+    COL[0] = triplets[0].second.second;
+
+    int nnz = 0;
+    for (int l=1; l<triplet_length; l++) {
+        // start a new row
+        if (triplets[l].second.first != row_count) {
+            row_count++;
+            nnz++;
+            ROW[row_count] = nnz;
+            COL[nnz] = triplets[l].second.second;
+            VAL[nnz] = triplets[l].first;
+        }
+
+        // start a new col
+        else if(triplets[l].second.second != COL[nnz]) {
+            nnz++;
+            COL[nnz] = triplets[l].second.second;
+            VAL[nnz] = triplets[l].first;
+        }
+
+        // else add to current value
+        else {
+            VAL[nnz] += triplets[l].first;
+        }
+    }
+
+    ROW[nrow] = nnz+1;
+
+    /*
     // collect row indices
     int count=0;
     for (int row=0; row<nrow; row++) {
@@ -142,6 +180,7 @@ Sparse::Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<int
             }
         }
     }
+    */
 
 }
 

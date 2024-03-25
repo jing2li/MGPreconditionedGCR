@@ -10,6 +10,7 @@
 #include <complex>
 #include "Operator.h"
 
+void parse_data();
 Sparse read_data();
 
 #endif //MGPRECONDITIONEDGCR_PARSE_H

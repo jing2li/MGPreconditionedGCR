@@ -12,15 +12,17 @@ void test_fields();
 void test_LA();
 void test_GCR(const int dim, const int truncation);
 void test_EigenSolver(const int dim);
+void test_data();
 
 
 int main() {
     // test with laplace operator
-    test_GCR(20, 20);
+    // test_GCR(200, 10);
 
     // test_EigenSolver(4);
 
-    // Sparse mat = read_data();
+    //parse_data();
+    test_data();
 
     //test_fields();
     //test_LA();
@@ -182,7 +184,8 @@ void test_EigenSolver(const int dim) {
 
 
 void test_GCR(const int dim, const int truncation) {
-    std::cout <<"Testing GCR solver of dimension "<< dim <<" x " << dim << std::endl;
+    std::cout <<"Testing GCR solver of dimension "<< dim <<" x " << dim << std::endl
+    << "truncation per " << truncation <<std::endl;
     // randomise A
     std::complex<double> *A = new std::complex<double> [dim*dim];
     std::complex<double> *rhs_base = new std::complex<double>[dim];
@@ -460,5 +463,21 @@ void test_LA() {
 
     std::cout<< "--------------------------------------------------------\n";
 
-
 }
+
+
+void test_data() {
+    //parse_data();
+    auto sample_mat = read_data();
+
+    auto mat = new Sparse(sample_mat);
+    GCR gcr(mat);
+    int dims[1] = {sample_mat.get_dim()};
+    Field rhs(dims, 1);
+    rhs.set_zero();
+    Field x(dims, 1);
+    x.init_rand();
+
+    gcr.solve(rhs, x, 1e-13, 100, 10);
+    delete mat;
+};
