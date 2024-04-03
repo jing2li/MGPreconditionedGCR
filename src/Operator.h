@@ -50,7 +50,7 @@ public:
     // Dense -> Sparse
     Sparse(int rows, int cols, std::complex<double> *matrix);
     // unordered Triplet -> Sparse
-    Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<int, int>> *triplets, int triplet_length);
+    Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<long, long>> *triplets, int triplet_length);
 
 
     // Query Sparse matrix information

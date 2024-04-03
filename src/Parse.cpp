@@ -8,7 +8,7 @@
 
 void parse_data(){
     std::ifstream file;
-    file.open("../../data/sample_matrix/conf5_0-4x4-10.mtx");
+    file.open("../../data/sample_matrix/conf5_4-8x8-05.mtx");
     if(file) printf("File read is successful.\n");
     else printf("File read is unsuccessful!\n");
 
@@ -19,15 +19,16 @@ void parse_data(){
     file >> rows >> cols >> elements;
 
     // triplet format
-    auto triplets = (std::pair<std::complex<double>, std::pair<int,int>> *) malloc(elements * sizeof(std::pair<std::complex<double>, std::pair<int,int>>));
+    auto triplets = (std::pair<std::complex<double>, std::pair<long, long>> *) malloc(elements * sizeof(std::pair<std::complex<double>, std::pair<long, long>>));
+    //std::vector<std::pair<std::complex<double>, std::pair<int,int>>> triplets(elements);
 
     // loop over all elements
     for (int l=0; l<elements; l++) {
         int row, col;
         double re, im;
         file >> row >> col >> re >> im;
-        std::pair<int, int> const ind(row-1, col-1);
-        std::pair<std::complex<double>, std::pair<int, int>> triplet(std::complex<double>(re, im), ind);
+        std::pair<long, long> const ind(row-1, col-1);
+        std::pair<std::complex<double>, std::pair<long, long>> triplet(std::complex<double>(re, im), ind);
         triplets[l] = triplet;
     }
     file.close();
@@ -54,12 +55,14 @@ void parse_data(){
         file1 << "\n" << column << " " << entry;
     }
     file1.close();
+
+    free(triplets);
 }
 
 
 Sparse read_data() {
     std::ifstream file;
-    file.open("../../data/sample_matrix/parsed.txt");
+    file.open("../../data/sample_matrix/4x4parsed.txt");
     if(file) printf("File read is successful.\n");
     else printf("File read is unsuccessful!\n");
 

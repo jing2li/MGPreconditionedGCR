@@ -115,7 +115,7 @@ Sparse::Sparse(const Sparse &matrix) {
     }
 }
 
-Sparse::Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<int, int>> *triplets, int triplet_length) {
+Sparse::Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<long, long>> *triplets, int triplet_length) {
     nrow=rows;
     dim=cols;
     ROW = (int *) malloc(sizeof(int) *(rows+1));
@@ -123,8 +123,8 @@ Sparse::Sparse(int rows, int cols, std::pair<std::complex<double>, std::pair<int
     VAL = (std::complex<double> *) calloc(triplet_length, sizeof(std::complex<double>));
 
     // sort triplets row major
-    std::sort(triplets, triplets+triplet_length, [&](auto &left, auto &right) {
-        return (left.second.first * nrow + left.second.second) < (right.second.first * nrow + right.second.second);
+    std::sort(triplets, triplets + triplet_length, [&](auto &left, auto &right) {
+        return (left.second.first * dim + left.second.second) < (right.second.first * dim + right.second.second);
     });
 
     // load first value

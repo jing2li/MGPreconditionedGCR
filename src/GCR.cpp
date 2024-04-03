@@ -78,12 +78,12 @@ void GCR::solve(const std::complex<double> *rhs, std::complex<double>* x, const 
         vec_copy(p, ps + (iter_count%truncation) * dim, dim);
 
 
-        printf("Step %d residual norm = %f\n", iter_count, std::sqrt(vec_squarednorm(r, dim).real()));
+        printf("Step %d residual norm = %.10e\n", iter_count, std::sqrt(vec_squarednorm(r, dim).real()));
 
     } while (vec_squarednorm(r, dim).real() > tol && iter_count<max_iter);
 
     if (iter_count==max_iter)
-        printf("GCR did not converge after %d steps! Residual norm = %f\n", max_iter, vec_squarednorm(r, dim).real());
+        printf("GCR did not converge after %d steps! Residual norm = %.10e\n", max_iter, vec_squarednorm(r, dim).real());
 
     // free memory
     free(p);
@@ -100,9 +100,11 @@ void GCR::solve(const Field& rhs, Field& x, GCR_param param) {
     if(param.truncation==0 && param.restart == 0) {
         printf("WARNING: Full GCR solve could incur high memory usage!");
     }
+    assertm(param.truncation==0 || param.restart==0, "Do not support concurrent restarting and truncation.");
 
     // loading parameters
     int truncation, restart;
+    int storage_size = std::max(param.truncation, param.restart);
     if(param.truncation) truncation = param.truncation;
     else truncation = rhs.field_size();
     if (param.restart) restart = param.restart;
@@ -116,14 +118,16 @@ void GCR::solve(const Field& rhs, Field& x, GCR_param param) {
     Field Ar(Ap);
 
     // Aps and ps are truncated directions
-    Field *Aps = (Field *) calloc(truncation, sizeof(Field));
-    Field *ps = (Field *) calloc(truncation, sizeof(Field));
+    Field *Aps = (Field *) calloc(storage_size, sizeof(Field));
+    Field *ps = (Field *) calloc(storage_size, sizeof(Field));
     Aps[0] = Ap;
     ps[0] = p;
 
     // main loop
     int iter_count = 0;
+    int global_count = 0;
     do {
+        global_count++;
         iter_count++;
 
         // factors alpha and beta (local to each loop)
@@ -140,7 +144,7 @@ void GCR::solve(const Field& rhs, Field& x, GCR_param param) {
         Ar = (*A_operator)(r);
 
         // beta corrections loop
-        int const lim = std::min(truncation, iter_count);
+        int const lim = std::min(storage_size, iter_count);
         // log correction
         Field Ap_corr(Ap.get_dim(), Ap.get_ndim());
         Field p_corr(p.get_dim(), p.get_ndim());
@@ -158,27 +162,28 @@ void GCR::solve(const Field& rhs, Field& x, GCR_param param) {
         Ap = Ar + Ap_corr;
 
 
-        // replace one vector in Aps and ps
-        Aps[iter_count%truncation] = Ap;
-        ps[iter_count%truncation] = p;
-
-        printf("Step %d residual norm = %.15f\n", iter_count, std::sqrt(r.squarednorm()));
+        printf("Step %d residual norm = %.10e\n", global_count, std::sqrt(r.squarednorm()));
 
 
-        // restart: wipe all stored directions
+        // if restart GCR from iter_count=0, wipe all stored directions
         if(iter_count%restart == 0) {
-            for(int i=0; i<truncation; i++) {
+            iter_count = 0;
+            for(int i=0; i<restart; i++) {
                 Aps[i].set_zero();
                 ps[i].set_zero();
             }
         }
+
+        // replace one vector in Aps and ps
+        Aps[iter_count % storage_size] = Ap;
+        ps[iter_count % storage_size] = p;
     } while (r.squarednorm() > param.tol*param.tol && iter_count<param.max_iter);
 
     free(Aps);
     free(ps);
 
     if (iter_count==param.max_iter)
-        printf("GCR did not converge after %d steps! Residual norm = %f\n", param.max_iter, std::sqrt(r.squarednorm()));
+        printf("GCR did not converge after %d steps! Residual norm = %.10e\n", param.max_iter, std::sqrt(r.squarednorm()));
 
 }
 

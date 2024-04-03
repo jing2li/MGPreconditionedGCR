@@ -9,6 +9,7 @@
 #include <fstream>
 #include <complex>
 #include "Operator.h"
+#include <vector>
 
 void parse_data();
 Sparse read_data();

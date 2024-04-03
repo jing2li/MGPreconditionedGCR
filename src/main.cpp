@@ -17,12 +17,12 @@ void test_data();
 
 int main() {
     // test with laplace operator
-    // test_GCR(200, 10);
+    test_GCR(20, 5);
 
     // test_EigenSolver(4);
 
     //parse_data();
-    test_data();
+    //test_data();
 
     //test_fields();
     //test_LA();
@@ -147,7 +147,7 @@ void test_EigenSolver(const int dim) {
            std::cout<<"is an eigenvector\n";
         }
         else{
-            printf("Deviates by %f\n", vec_squarednorm(tmp, dim).real());
+            printf("Deviates by %.10e\n", vec_squarednorm(tmp, dim).real());
         }
     }
 
@@ -173,7 +173,7 @@ void test_EigenSolver(const int dim) {
             std::cout<<"is an eigenvector\n";
         }
         else{
-            printf("Deviates by %f\n", vec_squarednorm(tmp, dim).real());
+            printf("Deviates by %.10e\n", vec_squarednorm(tmp, dim).real());
         }
     }
 
@@ -225,7 +225,7 @@ void test_GCR(const int dim, const int truncation) {
     Field x_sparse(dims, 1);
     x_sparse.init_rand();
     GCR gcr_sparse(S);
-    gcr_sparse.solve(rhs, x_sparse, {truncation, 0, 100, 1e-12});
+    gcr_sparse.solve(rhs, x_sparse, {0, 5, 100, 1e-12});
     delete S;
     printf("Test dense solver: \n");
     auto *M = new Dense(A, dim);
@@ -397,17 +397,17 @@ void test_LA() {
 
 
     std::cout<<"\tMultiplication with random matrix:\t";
-    std::pair<std::complex<double>, std::pair<int, int>> triplets[20];
+    std::pair<std::complex<double>, std::pair<long, long>> triplets[20];
     std::complex<double> sparse_mat[100] = {0.};
     for (int i=0; i<10; i++) {
         srand(i*200);
-        std::pair<int, int> const index(i, i);
-        triplets[2*i] = std::pair<std::complex<double>, std::pair<int, int>> (std::complex<double>(rand()%200/200., rand()%300/300.), index);
+        std::pair<long, long> const index(i, i);
+        triplets[2*i] = std::pair<std::complex<double>, std::pair<long, long>> (std::complex<double>(rand()%200/200., rand()%300/300.), index);
         sparse_mat[index.first*10+index.second] = triplets[2*i].first;
 
         srand(i*100);
-        std::pair<int, int> const index1((i+2)%10, i);
-        triplets[2*i+1] = std::pair<std::complex<double>, std::pair<int, int>> (std::complex<double>(rand()%200/200., rand()%300/300.), index1);
+        std::pair<long, long> const index1((i+2)%10, i);
+        triplets[2*i+1] = std::pair<std::complex<double>, std::pair<long, long>> (std::complex<double>(rand()%200/200., rand()%300/300.), index1);
         sparse_mat[index1.first*10+index1.second] = triplets[2*i+1].first;
     }
 
@@ -474,10 +474,10 @@ void test_data() {
     GCR gcr(mat);
     int dims[1] = {sample_mat.get_dim()};
     Field rhs(dims, 1);
-    rhs.set_zero();
+    rhs.init_rand();
     Field x(dims, 1);
     x.init_rand();
 
-    gcr.solve(rhs, x, {10, 0, 100, 1e-12});
+    gcr.solve(rhs, x, {30, 0, 100, 1e-12});
     delete mat;
 };
