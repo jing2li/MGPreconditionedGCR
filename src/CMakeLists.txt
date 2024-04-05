@@ -10,20 +10,16 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}")
 include_directories(${CMAKE_SOURCE_DIR}/lib/eigen-3.4.0)
 
 add_executable(MGPreconditionedGCR main.cpp
-        GCR.cpp
         GCR.h
-        Fields.cpp
         Fields.h
         MG.cpp
         MG.h
         utils.h
         utils.cpp
-        Mesh.cpp
         Mesh.h
         EigenSolver.cpp
         EigenSolver.h
         Parse.cpp
         Parse.h
-        Operator.cpp
         Operator.h
 )

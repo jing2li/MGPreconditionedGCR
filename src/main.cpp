@@ -13,19 +13,24 @@ void test_LA();
 void test_GCR(const int dim, const int truncation);
 void test_EigenSolver(const int dim);
 void test_data();
+void test_hermiticity();
+void probe_order();
 
 
 int main() {
-    // test with laplace operator
-    test_GCR(20, 5);
-
-    // test_EigenSolver(4);
-
+    /* 1. Testing data reading */
     //parse_data();
     //test_data();
 
+    /* 2. Testing algorithms*/
     //test_fields();
     //test_LA();
+    //test_GCR(20, 5);  // test with laplace operator
+    // test_EigenSolver(4);
+
+    /* Testing properties of matrix*/
+    test_hermiticity();
+
 
     return 0;
 }
@@ -44,10 +49,10 @@ void test_fields() {
         vector1[i] = std::complex<double>(rand()%2000/2000., rand()%2000/2000.);
     }
     int dims[1] = {20};
-    Field field(dims, 1, vector);
-    Field field1(dims, 1, vector1);
+    Field<int> field(dims, 1, vector);
+    Field<int> field1(dims, 1, vector1);
 
-    Field result = field + field1;
+    Field<int> result = field + field1;
     std::complex<double> exact[20];
     vec_add(1., vector1, 1., vector, exact, 20);
     bool pass=true;
@@ -101,7 +106,7 @@ void test_fields() {
     else std::cout << "FAILED";
 
     printf("\n\tCopy constructor: ");
-    Field field2(field);
+    Field<int> field2(field);
     pass = true;
     for(int i=0; i<20; i++) {
         if(norm(field2.val_at(i)-field.val_at(i)) > 1e-13) {
@@ -224,7 +229,7 @@ void test_GCR(const int dim, const int truncation) {
     auto *S = new Sparse(dim, dim, A);
     Field x_sparse(dims, 1);
     x_sparse.init_rand();
-    GCR gcr_sparse(S);
+    GCR<int> gcr_sparse(S);
     gcr_sparse.solve(rhs, x_sparse, {0, 5, 100, 1e-12});
     delete S;
     printf("Test dense solver: \n");
@@ -235,7 +240,7 @@ void test_GCR(const int dim, const int truncation) {
     Field x(dims, 1);
     x.init_rand();
 
-    GCR gcr(M);
+    GCR<int> gcr(M);
     gcr.solve(rhs, x, {truncation, 0, 100, 1e-12});
     delete M;
     std::cout<< "GCR_basic solution:\t";
@@ -266,7 +271,7 @@ void test_GCR(const int dim, const int truncation) {
         }
     }
 
-    free(A);
+    delete []A;
     Eigen::VectorXcd rhs_eigen(dim);
     for (int i=0; i<dim; i++) {
         rhs_eigen(i) = rhs.val_at(i);
@@ -285,7 +290,8 @@ void test_GCR(const int dim, const int truncation) {
     std::cout<<std::endl;
 
     std::cout << "Relative error compared to Eigen LU solver = " << (exact_sol-gcr_sol_eigen).norm()/exact_sol.norm() <<std::endl;
-
+    delete[] rhs_base;
+    delete[] x_base;
 }
 
 
@@ -374,7 +380,7 @@ void test_LA() {
 
     std::cout<< "--------------------------------------------------------\n";
     std::cout<< "(2) Sparse Class\n";
-    std::cout<< "b. Matrix vector multiplication\n" << "\tMultiplication with Identity:\t";
+    std::cout<< "a. Matrix vector multiplication\n" << "\tMultiplication with Identity:\t";
     for (int i=0; i<100; i++) {
         if (i%11 == 0) ref[i] = 1.;
         else ref[i] = 0.;
@@ -397,7 +403,7 @@ void test_LA() {
 
 
     std::cout<<"\tMultiplication with random matrix:\t";
-    std::pair<std::complex<double>, std::pair<long, long>> triplets[20];
+    std::pair<std::complex<double>, std::pair<int, int>> triplets[20];
     std::complex<double> sparse_mat[100] = {0.};
     for (int i=0; i<10; i++) {
         srand(i*200);
@@ -433,21 +439,17 @@ void test_LA() {
     std::cout << "\tArray to Sparse constructor:\t";
     pass = true;
     int count = 0;
-    for (int i=0; i<100; i++) {
-        if (sparse_mat[i]!= 0.) {
-            if(sparse_mat[i] == sparse_control.val_at(count)) {
-                count ++;
-            }
-            else {
+    for (int row=0; row<10; row++) {
+        for (int col = 0; col < 10; col++) {
+            if (sparse_mat[row * 10 + col] != sparse_control.val_at(row, col)) {
                 pass = false;
+                std::cout << "FAILED" << std::endl;
                 break;
             }
         }
     }
     if(pass)
         std::cout<< "PASSED" <<std::endl;
-    else
-        std::cout<<"FAILED" <<std::endl;
 
 
     std::cout << "\tTriplet to Sparse constructor:\t";
@@ -461,23 +463,106 @@ void test_LA() {
     if(pass) std::cout<< "PASSED" <<std::endl;
     else std::cout<<"FAILED" <<std::endl;
 
-    std::cout<< "--------------------------------------------------------\n";
+    std::cout<< "c. Sparse matrix addition\n" << "\tAddition with Identity:\t";
+    Sparse resu(sparse_control+sparse_id);
+    pass = true;
+    for(int i=0; i<10; i++) {
+        sparse_mat[i*10+i] += 1.;
+    }
 
+    for (int i=0; i<100; i++) {
+        if(norm(sparse_mat[i] - resu.val_at(i/10, i%10)) > 1e-13){
+            pass = false;
+            std::cout<<"FAILED" <<std::endl;
+            break;
+        }
+    }
+    if(pass) std::cout<< "PASSED" <<std::endl;
+
+
+    std::cout<<"\tSubtraction with Identity:\t";
+    Sparse resu1(sparse_control-sparse_id);
+    pass = true;
+    for(int i=0; i<10; i++) {
+        sparse_mat[i*10+i] -= 2.;
+    }
+
+    for (int i=0; i<100; i++) {
+        if(norm(sparse_mat[i] - resu1.val_at(i/10, i%10)) > 1e-13){
+            pass = false;
+            std::cout<<"FAILED" <<std::endl;
+            break;
+        }
+    }
+    if(pass) std::cout<< "PASSED" <<std::endl;
+
+
+    std::cout<<"\tMultiplication with constant:\t";
+    for (int i=0; i<100; i++) {
+        sparse_mat[i] *= M_PI;
+    }
+    Sparse resu2(resu1 * M_PI);
+
+    pass = true;
+    for (int i=0; i<100; i++) {
+        if(norm(sparse_mat[i] - resu2.val_at(i/10, i%10)) > 1e-13){
+            pass = false;
+            std::cout<<"FAILED" <<std::endl;
+            break;
+        }
+    }
+    if(pass) std::cout<< "PASSED" <<std::endl;
+
+    std::cout<< "--------------------------------------------------------\n";
 }
 
 
 void test_data() {
     //parse_data();
-    auto sample_mat = read_data();
+    Sparse<long> sample_mat = read_data();
 
     auto mat = new Sparse(sample_mat);
-    GCR gcr(mat);
-    int dims[1] = {sample_mat.get_dim()};
-    Field rhs(dims, 1);
+    GCR<long> gcr(mat);
+    long dims[1] = {sample_mat.get_dim()};
+    Field<long> rhs(dims, 1);
     rhs.init_rand();
-    Field x(dims, 1);
+    Field<long> x(dims, 1);
     x.init_rand();
 
     gcr.solve(rhs, x, {30, 0, 100, 1e-12});
     delete mat;
 };
+
+void test_hermiticity() {
+    auto mat = new Sparse(read_data());
+
+    long dims[1] = {(*mat).get_dim()};
+    Field<long> v(dims, 1), w(dims, 1);
+    v.init_rand(2); w.init_rand(5);
+
+    double const vmw = v.dot((*mat)(w)).real();
+    double const mvw = ((*mat)(v)).dot(w).real();
+
+    if ((vmw-mvw) < 1e-13){
+        printf("<v, Mw> = <Mv, w>: Matrix is Hermitian.\n");
+    }
+    else {
+        printf("<v, Mw> != <Mv, w>: Matrix is NOT Hermitian!\n");
+    }
+
+    long const dim = (*mat).get_dim();
+    for (int i=0; i<dim*dim; i++)
+    {
+        int const row = i/dim, col = i%dim;
+        if(norm((*mat).val_at(row, col) - conj((*mat).val_at(col, row))) > 1e-13) {
+            printf("Value-by-value: Matrix is NOT Hermitian!\n");
+            break;
+        }
+    }
+
+    delete mat;
+}
+
+void probe_order() {
+
+}

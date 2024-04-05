@@ -6,6 +6,7 @@
 #include "Parse.h"
 #define assertm(exp, msg) assert(((void)msg, exp))
 
+
 void parse_data(){
     std::ifstream file;
     file.open("../../data/sample_matrix/conf5_4-8x8-05.mtx");
@@ -15,7 +16,7 @@ void parse_data(){
     // ignore comments
     while (file.peek() == '%') file.ignore(2048, '\n');
     // read number of rows and columns
-    int rows, cols, elements;
+    long rows, cols, elements;
     file >> rows >> cols >> elements;
 
     // triplet format
@@ -23,8 +24,8 @@ void parse_data(){
     //std::vector<std::pair<std::complex<double>, std::pair<int,int>>> triplets(elements);
 
     // loop over all elements
-    for (int l=0; l<elements; l++) {
-        int row, col;
+    for (long l=0; l<elements; l++) {
+        long row, col;
         double re, im;
         file >> row >> col >> re >> im;
         std::pair<long, long> const ind(row-1, col-1);
@@ -37,7 +38,7 @@ void parse_data(){
     std::ofstream file1("../../data/sample_matrix/parsed.txt");
 
     // write to the file
-    int nrow, ncol, nnz;
+    long nrow, ncol, nnz;
     nrow = sparse.get_nrow();
     ncol = sparse.get_dim();
     nnz = sparse.get_nnz();
@@ -45,7 +46,7 @@ void parse_data(){
 
     // row
     for (int i=0; i<nrow; i++) {
-        int entry = sparse.get_ROW(i);
+        long entry = sparse.get_ROW(i);
         file1 << entry << " ";
     }
     for (int j=0; j<nnz; j++) {
@@ -60,26 +61,26 @@ void parse_data(){
 }
 
 
-Sparse read_data() {
+Sparse<long> read_data() {
     std::ifstream file;
     file.open("../../data/sample_matrix/4x4parsed.txt");
     if(file) printf("File read is successful.\n");
     else printf("File read is unsuccessful!\n");
 
-    int row, col, nnz;
+    long row, col, nnz;
     file >> row >> col >> nnz;
-    Sparse output(row, col, nnz);
+    Sparse<long> output(row, col, nnz);
 
     // read ROW
-    for (int i=0; i<row; i++) {
-        int row_ind;
+    for (long i=0; i<row; i++) {
+        long row_ind;
         file >> row_ind;
         output.mod_ROW_at(i, row_ind);
     }
 
     // read COL and VAL
-    for (int i=0; i<nnz; i++) {
-        int col_ind;
+    for (long i=0; i<nnz; i++) {
+        long col_ind;
         std::complex<double> val;
         file >> col_ind >> val;
         output.mod_COL_at(i, col_ind);

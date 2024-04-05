@@ -12,6 +12,7 @@
 #include <vector>
 
 void parse_data();
-Sparse read_data();
+
+Sparse<long> read_data();
 
 #endif //MGPRECONDITIONEDGCR_PARSE_H
