@@ -26,10 +26,11 @@ int main() {
     //test_fields();
     //test_LA();
     //test_GCR(20, 5);  // test with laplace operator
-    // test_EigenSolver(4);
+    //test_EigenSolver(4);
 
     /* Testing properties of matrix*/
-    test_hermiticity();
+    //test_hermiticity();
+    probe_order();
 
 
     return 0;
@@ -106,7 +107,7 @@ void test_fields() {
     else std::cout << "FAILED";
 
     printf("\n\tCopy constructor: ");
-    Field<int> field2(field);
+    const Field<int>& field2(field);
     pass = true;
     for(int i=0; i<20; i++) {
         if(norm(field2.val_at(i)-field.val_at(i)) > 1e-13) {
@@ -124,7 +125,7 @@ void test_fields() {
 void test_EigenSolver(const int dim) {
     std::cout << "Testing Eigenvector solver of dimension " << dim << " x " << dim << std::endl;
     // randomise A
-    std::complex<double> *A = (std::complex<double> *)malloc(sizeof(std::complex<double>) *dim * dim);
+    auto *A = (std::complex<double> *)malloc(sizeof(std::complex<double>) *dim * dim);
 
     for (int i = 0; i < dim; i++)
         for (int j = 0; j < dim; j++) {
@@ -161,10 +162,10 @@ void test_EigenSolver(const int dim) {
     printf("The basis of HouseholderQR is: \n");
     HouseholderQR qr(A, dim);
     qr.decomp();
-    std::complex<double> * Q = (std::complex<double>*)malloc(sizeof(std::complex<double>) * dim*dim);
+    auto * Q = (std::complex<double>*)malloc(sizeof(std::complex<double>) * dim*dim);
     qr.get_Q(Q);
 
-    std::complex<double> *tmp1 = (std::complex<double> *)malloc(dim *sizeof(std::complex<double>));
+    auto *tmp1 = (std::complex<double> *)malloc(dim *sizeof(std::complex<double>));
     for(int i=0; i<dim; i++) {
         for (int j=0; j<dim; j++) {
             std::cout << Q[i * dim + j] << " ";
@@ -438,7 +439,6 @@ void test_LA() {
     std::cout << "b. Constructor\n";
     std::cout << "\tArray to Sparse constructor:\t";
     pass = true;
-    int count = 0;
     for (int row=0; row<10; row++) {
         for (int col = 0; col < 10; col++) {
             if (sparse_mat[row * 10 + col] != sparse_control.val_at(row, col)) {
@@ -531,7 +531,7 @@ void test_data() {
 
     gcr.solve(rhs, x, {30, 0, 100, 1e-12});
     delete mat;
-};
+}
 
 void test_hermiticity() {
     auto mat = new Sparse(read_data());
@@ -564,5 +564,161 @@ void test_hermiticity() {
 }
 
 void probe_order() {
+    auto D = new Sparse(read_data());
+    long dims[1] = {(*D).get_dim()};
+    Field<long> probe(dims, 1);
+    probe.set_zero();
+    probe.mod_val_at((long)0, 1.);
 
+    Field result = (*D)(probe);
+
+    printf("Probe with field(0, 0, 0, 0, 0, 0) = 1:\n");
+
+    // if ordered (t, x, y, z, i, a), 1 - gamma0 = diag(0,0,2,2), 1 + gamma0(2,2,0,0)
+    // (-1, -, -, -, -, -) 4x4x4x4x3 elemtents should be zero
+    // (+1, 0, 0, 0, 0, -)
+    bool pass0 = true;
+    for (int i=0; i<768; i++) {
+        if (norm(result.val_at(768 * 3 + i)) > 1e-14) {
+            pass0 = false;
+            break;
+        }
+    }
+    if (pass0) {printf("All zeros in (-1, -, -, -, -, -)\n");}
+    else {printf("There are non-zeros in (-1, -, -, -, -, -) ordered\n");}
+
+    int count0=0;
+    for (int i=0; i<3; i++) {
+        if (norm(result.val_at(768 + i)) > 1e-14)
+            count0++;
+    }
+    printf("Number of non-zero elements in (1, 0, 0, 0, 0, -) is %d\n", count0);
+    if(pass0 && count0!=0) printf("Can be (t, x, y, z, i, a) ordered\n\n");
+
+
+    bool pass1 = true;
+    for (int i=0; i<12; i++) {
+        if (norm(result.val_at(3072-12+i)) > 1e-14) {
+            pass1 = false;
+            break;
+        }
+    }
+    if (pass1) {printf("All zeros in (-, -, -, -1, -, -)\n");}
+    else {printf("There are non-zeros in (-, -, -, -1, -, -)\n");}
+
+    int count1=0;
+    for (int i=0; i<3; i++) {
+        if (norm(result.val_at(12 + i)) > 1e-14)
+            count1++;
+    }
+    printf("Number of non-zero elements in (0, 0, 0, 1, 0, -) is %d\n", count1);
+    if(pass1 && count1!=0) printf("Can be (x, y, z, t, i, a) ordered\n\n");
+
+
+
+    // due to imaginary elements in gamma-2, we may see imaginary numbers in y=+-1 i=3
+    // (t, x, y, z, i, a) may have imaginary number in (0, 0, -1, 0, 3, -) or (0, 0, 1, 0, 3, -)
+    int count00 = 0;
+    for (int i=0; i<3; i++) {
+        if(result.val_at(3072 - 48 + 9 + i).imag() > 1e-13) {
+            count00++;
+        }
+        if(result.val_at(48 + 9 + i).imag() > 1e-13) {
+            count00++;
+        }
+    }
+    printf("There are %d imaginary numbers in (0, 0, +-1, 0, 3, -)\n", count00);
+
+    int count11 = 0;
+    for (int i=0; i<3; i++) {
+        if(result.val_at(3072 - 192 + 9 + i).imag() > 1e-13) {
+            count11++;
+        }
+        if(result.val_at(192 + 9 + i).imag() > 1e-13) {
+            count11++;
+        }
+    }
+    printf("There are %d imaginary numbers in (0, +-1, 0, 0, 3, -)\n", count11);
+
+    if (count00!=0) printf("Likely to be (t, x, y, z) ordered\n");
+    if (count11!=0) printf("Likely to be (x, y, z, t) ordered\n");
+
+    printf("\nnon-zero elements\n");
+    for (int i=0; i<3072; i++) {
+        if (norm(result.val_at(i)) > 1e-13) {
+            printf("%d\t", i);
+        }
+    }
+    printf("\nImaginary elements:\n");
+    for (int i=0; i<3072; i++) {
+        if (result.val_at(i).imag() > 1e-13) {
+            printf("%d\t", i);
+        }
+    }
+
+
+    // now probe with i=1
+    printf("\nProbe with field(0, 0, 0, 0, 1, 0) = 1:\n");
+    probe.mod_val_at((long)0, 0.);
+    probe.mod_val_at(3, 1.);
+    result = (*D)(probe);
+
+    // due to imaginary elements in gamma-2, we may see imaginary numbers in y=+-1 i=3
+    // (t, x, y, z, i, a) may have imaginary number in (0, 0, -1, 0, 2, -) or (0, 0, 1, 0, 2, -)
+    int count000 = 0;
+    for (int i=0; i<12; i++) {
+        if(result.val_at(3072 - 48 + 6 + i).imag() > 1e-13) {
+            count000++;
+        }
+        if(result.val_at(48 + 6 + i).imag() > 1e-13) {
+            count000++;
+        }
+    }
+    printf("There are %d imaginary numbers in (0, 0, +-1, 0, 2, -)\n", count000);
+    int count111 = 0;
+    for (int i=0; i<3; i++) {
+        if(result.val_at(3072 - 192 + 6 + i).imag() > 1e-13) {
+            count111++;
+        }
+        if(result.val_at(192 + 6 + i).imag() > 1e-13) {
+            count111++;
+        }
+    }
+    printf("There are %d imaginary numbers in (0, +-1, 0, 0, 2, -)\n", count111);
+    if (count000!=0) printf("likely to be (t, x, y, z) ordered\n");
+    if (count111!=0) printf("Likely to be (x, y, z, t) ordered\n");
+
+
+
+    printf("\nProbe with field(1,0,0,0,0,0) = 0:\n");
+    probe.mod_val_at(3, 0.);
+    probe.mod_val_at(768, 1.);
+    result = (*D)(probe);
+    // due to imaginary elements in gamma-2, we may see imaginary numbers in y=+-1 i=3
+    // (t, x, y, z, i, a) may have imaginary number in (1, 0, -1, 0, 3, -) or (1, 0, 1, 0, 3, -)
+    int c0 = 0;
+    for (int i=0; i<12; i++) {
+        if(result.val_at(768 + 3*48 + 9 + i).imag() > 1e-13) {
+            c0++;
+        }
+        if(result.val_at(768 + 48 + 9 + i).imag() > 1e-13) {
+            c0++;
+        }
+    }
+    printf("There are %d imaginary numbers in (1, 0, +-1, 0, 3, -)\n", count000);
+    int c1 = 0;
+    for (int i=0; i<3; i++) {
+        if(result.val_at(768 + 3 * 192 + 9 + i).imag() > 1e-13) {
+            c1++;
+        }
+        if(result.val_at(768 + 192 + 9 + i).imag() > 1e-13) {
+            c1++;
+        }
+    }
+    printf("There are %d imaginary numbers in (1, +-1, 0, 0, 3, -)\n", count111);
+    if (count000!=0) printf("likely to be (t, x, y, z) ordered\n");
+    if (count111!=0) printf("Likely to be (x, y, z, t) ordered\n");
+
+
+    delete D;
 }

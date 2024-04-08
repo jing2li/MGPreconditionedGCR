@@ -84,6 +84,7 @@ public:
     Sparse operator*(std::complex<double> a) const; // multiplication by constant
 
     void dagger();
+    ~Sparse();
 
 protected:
     using Operator<num_type>::dim;
@@ -151,7 +152,9 @@ Dense<num_type> Dense<num_type>::dagger() {
 
 template <typename num_type>
 Dense<num_type>::~Dense() {
-    //free(mat);
+    if (mat != nullptr) {
+        free (mat);
+    }
 }
 
 
@@ -256,30 +259,6 @@ Sparse<num_type>::Sparse(num_type rows, num_type cols, std::pair<std::complex<do
     }
 
     ROW[nrow] = nnz+1;
-
-    /*
-    // collect row indices
-    num_type count=0;
-    for (num_type row=0; row<nrow; row++) {
-        ROW[row] = count;
-        for (num_type col=0; col<dim; col++) {
-            std::complex<double> sum(0., 0.);
-            for (num_type l=0; l<triplet_length; l++) {
-                if(triplets[l].second.first==row &&  triplets[l].second.second==col) {
-                    if (sum == 0.) {
-                        COL[count] = col;
-                    }
-                    sum += triplets[l].first;
-                }
-            }
-            if (sum != 0.) {
-                VAL[count] = sum;
-                count++;
-            }
-        }
-    }
-    */
-
 }
 
 template <typename num_type>
@@ -488,6 +467,13 @@ Sparse<num_type> Sparse<num_type>::operator*(std::complex<double> a) const {
         output.mod_VAL_at(i, VAL[i] * a);
     }
     return output;
+}
+
+template<typename num_type>
+Sparse<num_type>::~Sparse() {
+    if(ROW != nullptr) free(ROW);
+    if(COL != nullptr) free(COL);
+    if(VAL != nullptr) free(VAL);
 }
 
 #endif //MGPRECONDITIONEDGCR_OPERATOR_H
