@@ -12,13 +12,10 @@ include_directories(${CMAKE_SOURCE_DIR}/lib/eigen-3.4.0)
 add_executable(MGPreconditionedGCR main.cpp
         GCR.h
         Fields.h
-        MG.cpp
         MG.h
         utils.h
         utils.cpp
         Mesh.h
-        EigenSolver.cpp
-        EigenSolver.h
         Parse.cpp
         Parse.h
         Operator.h

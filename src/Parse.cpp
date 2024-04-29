@@ -61,9 +61,9 @@ void parse_data(){
 }
 
 
-Sparse<long> read_data() {
+Sparse<long> read_data(const std::string& filename) {
     std::ifstream file;
-    file.open("../../data/sample_matrix/4x4parsed.txt");
+    file.open("../../data/sample_matrix/" + filename);
     if(file) printf("File read is successful.\n");
     else printf("File read is unsuccessful!\n");
 

@@ -9,161 +9,253 @@
 #include <complex>
 #include "GCR.h"
 #include "Mesh.h"
+#include "Fields.h"
 #include "utils.h"
+#include "Operator.h"
 
 
 template <typename num_type>
-class MG {
+class MG_Param {
 public:
-    MG(const std::complex<double> *matrix, const num_type dimension, const int nlevels, const int subblocks, const int eigens);
-    void recursive_solve(const std::complex<double> *mat, const std::complex<double> *rhs, std::complex<double> *x,
-                    num_type const dimension, const int cur_level);
-    void solve(const std::complex<double> *rhs, std::complex<double> *x,  const double tol, const int max_iter);
-    void compute_prolongator(Mesh<num_type> mesh);
-    ~MG();
-private:
-    int dim;
-    std::complex<double> *A;
-    std::complex<double> *P; // prolongator
-    GCR<num_type> gcr_solver; // smoother
-
-    int levels; // levels incl. the innermost
-    int subblock_dim; // dimension of subblocks in geometric coarsening
-    int eigen_dim; // nuber of eigenvectors in algebraic coarsening
-    int *map; //mapping from local to global
-
+    Mesh<num_type> mesh;
+    num_type subblock_dim; // dim of subblocks per spacetime direction
+    int n_eigen; // number of eigenvectors to keep per subblock
+    GCR_param<num_type> precomp_gcr_param = {0, 5, 1000, 1e-8, false};
+    bool spacetime[6] = {true, true, true, true, false, false}; // spacetime indices mask
+    bool spinor[6] = {false, false, false, false, true, false};
+    int n_level = 1; // numbers of coarse grids
 };
 
 
 template <typename num_type>
-MG<num_type>::MG(const std::complex<double> *matrix, const num_type dimension, const int nlevels, const int subblocks, const int eigens) {
-    dim=dimension;
-    A = (std::complex<double> *) malloc(sizeof(std::complex<double>) * dim * dim);
-    vec_copy(matrix, A, dim*dim);
-    levels = nlevels;
-    subblock_dim = subblocks;
-    eigen_dim = eigens;
-}
+class MG : public Operator<num_type> {
+public:
+    MG(Operator<num_type>* M, MG_Param<num_type> parameter);
+
+    void recursive_solve(Field<num_type> rhs, Field<num_type> x, const int cur_level);
+    void solve(Field<num_type> rhs, Field<num_type> x);
+
+    // expand/restrict from/to block-local eigenvectors
+    Field<num_type> expand(Field<num_type> &x_coarse, num_type block_id);
+    Field<num_type> restrict(Field<num_type>& x_fine, num_type block_id);
+    // restrict to blocked space
+    Field<num_type> restrict_block(Field<num_type> &x_fine, num_type block_id, num_type sub_size);
+
+
+    // operator functionality ~M^(-1)
+    [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override {printf("Warning: Exact value of MG should not be queried!\n");return 0;}; // value at (row, col)
+    [[nodiscard]] std::complex<double> val_at(num_type location) const override {printf("Warning: Exact value of MG should not be queried!\n"); return 0;}; // value at memory location
+    Field<num_type> operator()(Field<num_type> const &f) override; // matrix vector multiplication
+
+
+    ~MG();
+
+private:
+    MG_Param<num_type> param;
+    Operator<num_type> *m;
+    Field<num_type> **prolongator; // array of pointers [sub-domain rank][local eigenvector rank]
+};
+
 
 template <typename num_type>
-void MG<num_type>::recursive_solve(const std::complex<double> *mat, const std::complex<double> *rhs, std::complex<double> *x,
-                                   const num_type dimension, const int cur_level) {
-    if (cur_level == 1) // coarsest level solve directly
+class Arnoldi {
+public:
+    Arnoldi(GCR_param<num_type> gcr_param, const int n_eigenvec) {
+        param = gcr_param; n_vec = n_eigenvec;};
+
+    void solve(Operator<num_type> *m_init, Field<num_type>* eigenvecs);
+
+private:
+    int n_vec;
+    GCR_param<num_type> param {0,0,0,1e-10, false};
+};
+
+
+template <typename num_type>
+void Arnoldi<num_type>::solve(Operator<num_type> *m, Field<num_type>* eigenvecs) {
+    // inverse power iteration
+    GCR<num_type> gcr(m, param);
+
+    // a random vector b
+    num_type dims[1] = {m->get_dim()};
+    Field<num_type> b(dims, 1);
+    b.init_rand();
+    //b.set_constant(std::complex<double>(1, 1));
+    gcr.solve(b, b);
+    // b = (*m)(b);
+    eigenvecs[0] = b * (1./b.norm());
+
+    for (int count=1; count<n_vec; count++){
+        Field<num_type> tmp(dims, 1);
+        gcr.solve(eigenvecs[count-1], tmp);
+        //tmp = (*m)(eigenvecs[count-1]);
+        for (int j=0; j<count; j++) {
+            std::complex<double> h = eigenvecs[j].dot(tmp);
+            tmp -= eigenvecs[j] * h;
+        }
+        eigenvecs[count] = tmp * (1./tmp.norm());
+    }
+
+}
+
+template<typename num_type>
+Field<num_type> MG<num_type>::operator()(const Field<num_type> &f) {
+    Field x(f.get_dim(), f.get_ndim());
+    solve(f, x);
+    return x;
+}
+
+
+template <typename num_type>
+MG<num_type>::MG(Operator<num_type>* M, MG_Param<num_type> parameter) {
+    param = parameter;
+    m = M;
+
+    /* precomputation of reduced basis */
+    // find eigenvectors of M
+    printf("Compute global eigenvectors...\n");
+    Field<num_type> *eigenvecs;
+    eigenvecs = new Field<num_type>[param.n_eigen]; // array of eigenvectors
+
+    Arnoldi eigen_solver(param.precomp_gcr_param, param.n_eigen);
+    eigen_solver.solve(M, eigenvecs);
+
+
+    printf("Domain decomposition...\n");
+    // domain decomposition in spacetime direction
+    param.mesh.blocking(param.subblock_dim, param.spacetime); // block the mesh
+    num_type n_blocks = param.mesh.get_nblocks();
+    // find eigenvectors in each block
+    prolongator = new Field<num_type>*[n_blocks]; // array of pointers
+    for (int i=0; i<n_blocks; i++) {
+        prolongator[i] = new Field<num_type>[param.n_eigen]; // each pointer points to n_eigen fields
+    }
+    printf("Domain decomposition block size (%d, %d, %d, %d) with block count (%d, %d, %d, %d)\n",
+           param.subblock_dim, param.subblock_dim, param.subblock_dim, param.subblock_dim,
+           param.mesh.get_block_dim()[0], param.mesh.get_block_dim()[1],
+           param.mesh.get_block_dim()[2], param.mesh.get_block_dim()[3]);
+
+
+    num_type const subblock_size = param.mesh.get_block_size();
+    // loop over blocks
+    for (num_type i=0; i<param.mesh.get_block_dim()[0]; i++){
+    for (num_type j=0; j<param.mesh.get_block_dim()[1]; j++){
+    for (num_type k=0; k<param.mesh.get_block_dim()[2]; k++){
+    for (num_type l=0; l<param.mesh.get_block_dim()[3]; l++)
     {
-        GCR inner_solver(mat, dimension);
-        inner_solver.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
-    }
+        // find relevant indices
+        num_type const block_ind[4] = {i, j, k, l}; // current block index
+        num_type const block_idx = param.mesh.ind_loc(block_ind, param.mesh.get_block_dim(), 4); // block rank
+        printf("Project eigenvectors in domain %d...\n", block_idx);
 
-    else // middle levels
-    {
-        int iter_count = 0;
-        double residual = 1.0;
-        GCR gcr_smoother(mat, dimension);
-        // 1. pre-smoothing
-        gcr_smoother.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
-
-        // 2. coarse grid correction
-        // 2.a map to coarse grid
-        int coarse_dim;
-        std::complex<double> *mat_coarse = (std::complex<double> *) malloc(
-                sizeof(std::complex<double>) * coarse_dim * coarse_dim);
-        std::complex<double> *x_coarse = (std::complex<double> *) malloc(sizeof(std::complex<double>) * coarse_dim);
-        std::complex<double> *rhs_coarse = (std::complex<double> *) malloc(
-                sizeof(std::complex<double>) * coarse_dim);
-
-        // !!!need to implement transpose and matrix multiplication!!!
-        // mat_coarse = P.transpose() * mat * P;
-        // rhs_coarse = P.transpose() * rhs;
-
-        // 2.b apply recursive solver
-        recursive_solve(mat_coarse, rhs_coarse, x_coarse, coarse_dim, cur_level-2);
-
-        // 2.c map to fine grid
-        // x += P * x_coarse;
-
-        // 2.d free memory
-        free(x_coarse);
-        free(mat_coarse);
-        free(rhs_coarse);
-
-        // 3. post-smoothing
-        gcr_smoother.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
-    }
+        for (int eigen_id = 0; eigen_id<param.n_eigen; eigen_id++) {
+            prolongator[block_idx][eigen_id] = restrict_block(eigenvecs[eigen_id], block_idx, subblock_size);
+        }
+    }}}}
+    delete [] eigenvecs;
+    printf("Adaptive Multigrid reduced bases precomputation complete.\n");
 }
+
+template<typename num_type>
+Field<num_type> MG<num_type>::expand(Field<num_type> &x_coarse, num_type block_id){
+    Field<num_type> x_fine(param.mesh.get_dims(), param.mesh.get_ndim());
+    x_fine.set_zero();
+
+    // loop over all members of x_coarse
+    for (num_type eigen_id=0; eigen_id<param.n_eigen; eigen_id++) {
+        x_fine += prolongator[block_id][eigen_id] * x_coarse.val_at(eigen_id);
+    }
+
+    return x_fine;
+
+}
+
+template<typename num_type>
+Field<num_type> MG<num_type>::restrict(Field<num_type> &x_fine, num_type block_id){
+    num_type dims[1] = {param.n_eigen};
+    Field<num_type> x_coarse(dims, 1);
+
+    // loop over all members of x_coarse x_i = P_i.dot(x)
+    for (num_type eigen_id=0; eigen_id<param.n_eigen; eigen_id++) {
+        x_coarse.mod_val_at(eigen_id, prolongator[block_id][eigen_id].dot(x_fine));
+    }
+
+    return x_coarse;
+}
+
+template<typename num_type>
+Field<num_type> MG<num_type>::restrict_block(Field<num_type> &x_fine, num_type block_idx, num_type sub_size) {
+    Field<num_type> x_coarse(x_fine.get_dim(), x_fine.get_ndim());
+    x_coarse.set_zero();
+
+    // loop over all members of x_coarse
+    for (num_type idx_loc=0; idx_loc<sub_size; idx_loc++){
+    for (int spinor=0; spinor<4; spinor++){// copy all 12 values at the lattice point
+    for (int colour=0; colour<3; colour++){
+        num_type idx_glob = param.mesh.get_block_map(block_idx)[idx_loc];
+        num_type* full_glob = param.mesh.alloc_full_index(idx_glob, spinor, colour, param.spacetime, param.spinor);
+        x_coarse.mod_val_at(param.mesh.ind_loc(full_glob), x_fine.val_at(param.mesh.ind_loc(full_glob)));
+        delete []full_glob;
+    }}}
+
+    return x_coarse;
+}
+
+template<typename num_type>
+void MG<num_type>::solve(Field<num_type> rhs, Field<num_type> x) {
+    // just a two level solve
+
+    // 1. pre-smoothing
+    GCR_param<num_type> param_smooth = {0,5,100,1e-10,false};
+    GCR<num_type> gcr_smooth(m, param_smooth);
+    gcr_smooth.solve(rhs, x);
+
+    // 2. coarse grid correction
+    // collect spacetime dimensions
+    num_type const block_sizes[4] = {param.subblock_dim, param.subblock_dim, param.subblock_dim, param.subblock_dim};
+
+    // loop over all sub-domains
+    for (num_type i=0; i<param.mesh.get_block_dim()[0]; i++){
+    for (num_type j=0; j<param.mesh.get_block_dim()[1]; j++){
+    for (num_type k=0; k<param.mesh.get_block_dim()[2]; k++){
+    for (num_type l=0; l<param.mesh.get_block_dim()[3]; l++){
+        num_type block_ind[4] = {i,j,k,l};
+        num_type block_idx = param.mesh.ind_loc(block_ind, param.mesh.get_block_dim(), 4);
+
+        // find coarse rhs
+        Field rhs_coarse = restrict(rhs, block_idx);
+
+        // find coarse operator
+        auto m_local = new std::complex<double> [param.n_eigen * param.n_eigen];
+        for (num_type row = 0; row<param.n_eigen; row++) {
+            for (num_type col=0; col<param.n_eigen; col++) {
+                m_local[row * param.n_eigen + col] = prolongator[block_idx][row].dot((*m)(prolongator[block_idx][col]));
+            }
+        }
+        auto m_coarse = new Dense<num_type>(m_local, param.n_eigen);
+        delete[] m_local;
+
+        // solve coarse field
+        GCR_param<num_type> param_coarse = {0,5,1000,1e-10,false};
+        GCR<num_type> gcr_coarse(m_coarse, param_coarse);
+        num_type const dims[1] = {param.n_eigen};
+        Field<num_type> x_coarse(dims, 1);
+        gcr_coarse.solve(rhs_coarse, x_coarse);
+        delete m_coarse;
+
+        // add to x
+        x += expand(x_coarse, block_idx);
+    }}}}
+
+    // 3. post-smoothing
+    gcr_smooth.solve(rhs, x);
+}
+
 
 template <typename num_type>
-void MG<num_type>::compute_prolongator(Mesh<num_type> mesh) {
-    // only 1 level
-    for (int l=levels; l>0; l--) {
-
-    }
-
+MG<num_type>::~MG() {
+    delete[] prolongator;
 }
-
-
-/*
-void level_solve(const std::complex<double> *mat, const std::complex<double> *rhs, std::complex<double> *x,
-                         const int dimension, const int cur_level) {
-
-        int iter_count = 0;
-        double residual = 1.0;
-        GCR gcr_smoother(mat, dimension);
-        // 1. pre-smoothing
-        gcr_smoother.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
-
-        // 2. coarse grid correction
-        // 2.a map to coarse grid
-        int coarse_dim;
-        std::complex<double> *mat_coarse = (std::complex<double> *) malloc(
-                sizeof(std::complex<double>) * coarse_dim * coarse_dim);
-        std::complex<double> *x_coarse = (std::complex<double> *) malloc(sizeof(std::complex<double>) * coarse_dim);
-        std::complex<double> *rhs_coarse = (std::complex<double> *) malloc(
-                sizeof(std::complex<double>) * coarse_dim);
-
-        // !!!need to implement transpose and matrix multiplication!!!
-        // mat_coarse = P.transpose() * mat * P;
-        // rhs_coarse = P.transpose() * rhs;
-
-        // 2.b apply recursive solver
-        recursive_solve(mat_coarse, rhs_coarse, x_coarse, coarse_dim, cur_level-2);
-
-        // 2.c map to fine grid
-        // x += P * x_coarse;
-
-        // 2.d free memory
-        free(x_coarse);
-        free(mat_coarse);
-        free(rhs_coarse);
-
-        // 3. post-smoothing
-        gcr_smoother.solve(rhs, x, 1e-12, 1, 10); // apply 1 iteration
-    }
-}
-
-*/
-
-
-template <typename num_type>
-void MG<num_type>::solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol, const int max_iter) {
-    // residual
-    std::complex<double> *res = (std::complex<double> *)malloc(sizeof(std::complex<double>) * dim);
-    vec_copy(rhs, res, dim); // initialise res;
-
-    int iter_count = 0;
-    do {
-        iter_count ++;
-        recursive_solve(A, rhs, x, dim, levels);
-
-        // res = rhs - Ax
-        mat_vec(A, x, res, dim);
-        vec_add(one, rhs, -one, res, res, dim);
-    } while (iter_count < max_iter && vec_squarednorm(res, dim).real() > tol);
-
-    free(res);
-}
-
-template <typename num_type>
-MG<num_type>::~MG() {free(A);}
 
 
 #endif //MGPRECONDITIONEDGCR_MG_H

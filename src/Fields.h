@@ -13,6 +13,18 @@
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 template <typename num_type>
+class Point {
+private:
+    num_type t = 0;
+    num_type x = 0;
+    num_type y = 0;
+    num_type z = 0;
+    num_type spinor = 4;
+    num_type colour = 3;
+    int txyzia[6] = {0,1,2,3,4,5};
+};
+
+template <typename num_type>
 class Field {
 public:
     Field() = default;
@@ -21,13 +33,16 @@ public:
     Field(const num_type *dimensions, num_type ndim, std::complex<double> *field_init); // field with initialisation
     void init_rand(int seed = 1); // random initialisation of field to value [-1, 1]
     void set_zero();
+    void set_constant(std::complex<double> c);
 
     // Query Field information
     [[nodiscard]] num_type* get_dim() const; // get dimensions
     [[nodiscard]] num_type get_ndim() const; // get number of dimensions;
     [[nodiscard]] num_type field_size() const; // get length of u_field
+    Mesh<num_type> get_mesh() const; //
     std::complex<double> val_at(num_type const *index) const; // retrieve field value at an index
     std::complex<double> val_at(num_type const location) const;
+    std::complex<double> val_at(Point<num_type> const point) const;
     void mod_val_at(num_type const *index, std::complex<double> const new_value); // modify field value at index
     void mod_val_at(const num_type location, std::complex<double> const new_value); // modify field value at memory location
 
@@ -36,8 +51,12 @@ public:
     Field operator-(const Field& f) const;
     [[nodiscard]] std::complex<double> dot(const Field& f) const; // inner produce elementwise left.dagger() * right
     [[nodiscard]] double squarednorm() const;
+    [[nodiscard]] double norm() const {return std::sqrt(squarednorm());};
     Field operator*(std::complex<double> a) const; // scalar multiplication
     Field &operator=(const Field& f) noexcept;
+    Field &operator+=(const Field& f);
+    Field &operator-=(const Field& f);
+    Field gamma5(int spinor_index) const; // left multiply with gamma5
     void dagger();
 
 
@@ -49,8 +68,8 @@ protected:
     num_type nindex = 0;
     Mesh<num_type> mesh;
     std::complex<double> *field{};
-    bool daggered = false;
 };
+
 
 template <typename num_type>
 class Boson : public Field<num_type> {
@@ -156,7 +175,12 @@ void Field<num_type>::set_zero() {
         field[i] = 0.;
     }
 }
-
+template <typename num_type>
+void Field<num_type>::set_constant(std::complex<double> c) {
+    for (num_type i=0; i<mesh.get_size(); i++) {
+        field[i] = c;
+    }
+}
 template <typename num_type>
 std::complex<double> Field<num_type>::val_at(const num_type *index) const{
     for (num_type i=0; i<nindex; i++) {
@@ -184,6 +208,11 @@ void Field<num_type>::mod_val_at(const num_type *index, std::complex<double> con
 template <typename num_type>
 void Field<num_type>::mod_val_at(num_type const location, std::complex<double> const new_value) {
     field[location] = new_value;
+}
+
+template <typename num_type>
+Mesh<num_type> Field<num_type>::get_mesh() const {
+    return mesh;
 }
 
 template <typename num_type>
@@ -228,9 +257,7 @@ template <typename num_type>
 std::complex<double> Field<num_type>::dot(const Field& f) const {
     assertm(this->field_size() == f.field_size(), "Lengths of two fields do not match!");
     num_type* f_dim = f.get_dim();
-    for (num_type i=0; i<nindex; i++) {
-        assertm(dim[i] == f_dim[i], "Dimension arrangement of two fields do not match!");
-    }
+    
     //assertm(daggered == true, "Require first field to be daggered!");
 
     std::complex<double> output(0., 0.);
@@ -262,7 +289,7 @@ Field<num_type> Field<num_type>::operator*(std::complex<double> a) const{
 
 template<typename num_type>
 void Field<num_type>::dagger() {
-    daggered = true;
+    //daggered = true;
 }
 
 template <typename num_type>
@@ -296,6 +323,28 @@ Field<num_type> &Field<num_type>::operator=(const Field& f) noexcept{
     }
 }
 
+template<typename num_type>
+Field<num_type> &Field<num_type>::operator+=(const Field &f) {
+    assertm(field_size() == f.field_size(), "Field dimensions do not match!\n");
+
+    for (int i=0; i<field_size(); i++) {
+        field[i] += f.field[i];
+    }
+
+    return *this;
+}
+
+template<typename num_type>
+Field<num_type> &Field<num_type>::operator-=(const Field &f) {
+    assertm(field_size() == f.field_size(), "Field dimensions do not match!\n");
+
+    for (int i=0; i<field_size(); i++) {
+        field[i] -= f.field[i];
+    }
+
+    return *this;
+}
+
 template <typename num_type>
 Boson<num_type>::Boson(num_type const* index_dim) {
     // copy to dim
@@ -306,6 +355,37 @@ Boson<num_type>::Boson(num_type const* index_dim) {
 
     // initialise mesh
     mesh = Mesh(index_dim, nindex);
+}
+
+template<typename num_type>
+Field<num_type> Field<num_type>::gamma5(int spinor_index) const {
+    Field output(*this);
+
+    for (num_type i = 0; i < mesh.get_size(); ++i) {
+        // convvert location to index
+        num_type index[nindex];
+        for (int j=0; j<nindex; j++) {
+            index[j] = mesh.loc_ind(i)[j];
+        }
+        switch(index[spinor_index])
+        {
+            case 0:
+                index[spinor_index] = 2;
+                break;
+            case 1:
+                index[spinor_index] = 3;
+                break;
+            case 2:
+                index[spinor_index] = 0;
+                break;
+            case 3:
+                index[spinor_index] = 1;
+                break;
+        }
+
+        output.mod_val_at(index, field[i]);
+    }
+    return output;
 }
 
 template <typename num_type>

@@ -9,36 +9,54 @@
 #include "utils.h"
 #include "Operator.h"
 
+template <typename num_type>
 class GCR_param {
 public:
     int truncation = 0;  // set to non-zero for truncation
     int restart = 0;  // set to non-zero for restart
     int max_iter = 100;
     double tol = 0;
+    bool verbose = true;
+    Operator<num_type> *precond = nullptr;
 };
 
 // for solving Ax = rhs
 template <typename num_type>
-class GCR {
+class GCR: public Operator<num_type> {
 public:
     // load LSE that needs to be solved
     GCR()= default;
     GCR(const std::complex<double> *matrix, const num_type dimension);
     template <class OPERATOR>
-    explicit GCR(OPERATOR *M) : A_operator(M), dim(A_operator->get_dim()) {};
+    explicit GCR(OPERATOR *M, GCR_param<num_type> gcr_param) : A_operator(M), dim(A_operator->get_dim()), param(gcr_param) {};
 
 
     // solve for Ax = rhs
     void solve(const std::complex<double> *rhs, std::complex<double> *x, const double tol, const int max_iter, const int truncation);
-    void solve(const Field<num_type>& rhs, Field<num_type>& x, GCR_param param);
+    void solve(const Field<num_type>& rhs, Field<num_type>& x);
+
+
+    // Operator functionality, equivalent to applying M^(-1)
+    [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override {return A_operator->val_at(row, col);}; // value at (row, col)
+    [[nodiscard]] std::complex<double> val_at(num_type location) const override {return A_operator->val_at(location);}; // value at memory location
+    Field<num_type> operator()(Field<num_type> const &f) override; // matrix vector multiplication
+
 
     ~GCR();
 private:
     std::complex<double> *A = nullptr;
     Operator<num_type>* A_operator;
+    GCR_param<num_type> param;
 
     num_type dim = 0; // dimension of regular matrix A
 };
+
+template<typename num_type>
+Field<num_type> GCR<num_type>::operator()(const Field<num_type> &f) {
+    Field<num_type> x(f.get_dim(), f.get_ndim());
+    solve(f, x);
+    return x;
+}
 
 
 template <typename num_type>
@@ -127,28 +145,33 @@ void GCR<num_type>::solve(const std::complex<double> *rhs, std::complex<double>*
 }
 
 template <typename num_type>
-void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x, GCR_param param) {
+void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
     assertm(rhs.field_size() == dim, "Field dimension does not match with Operator!");
     assertm(x.field_size() == dim, "x dimension does not match with Operator!");
-    if(param.truncation==0 && param.restart == 0) {
-        printf("WARNING: Full GCR solve could incur high memory usage!");
+    if(param.truncation==0 && param.restart == 0 && param.verbose) {
+        printf("WARNING: Full GCR solve could incur high memory usage!\n");
     }
     assertm(param.truncation==0 || param.restart==0, "Do not support concurrent restarting and truncation.");
 
+
     // loading parameters
     int truncation, restart;
-    int storage_size = std::max(param.truncation, param.restart);
-    if(param.truncation) truncation = param.truncation;
-    else truncation = rhs.field_size();
-    if (param.restart) restart = param.restart;
+    int storage_size = param.max_iter;
+    if(param.truncation!=0) {truncation = param.truncation; storage_size = truncation;}
+    else truncation = param.max_iter;
+    if (param.restart!=0) {restart = param.restart; storage_size = restart;}
     else restart = param.max_iter;
 
     //initialise 4 intermediate vectors
     Field Ax = (*A_operator)(x);
-    Field r = rhs - Ax; // r = rhs - Ax
+    Field r = rhs - Ax;
     Field p(r); // p = r
     Field Ap = (*A_operator)(p);
     Field Ar(Ap);
+
+    // apply preconditioning if specified
+    if(param.precond != nullptr) {r = (*param.precond)(r);}
+
 
     // Aps and ps are truncated directions
     Field<num_type> *Aps = (Field<num_type> *) calloc(storage_size, sizeof(Field<num_type>));
@@ -172,6 +195,8 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x, GCR_pa
         x = x + p * alpha;
         r = r - Ap * alpha;
 
+        // apply preconditioning if needed
+        if (param.precond != nullptr) {r = (*param.precond)(r);}
 
         // new Ar
         Ar = (*A_operator)(r);
@@ -195,7 +220,7 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x, GCR_pa
         Ap = Ar + Ap_corr;
 
 
-        printf("Step %d residual norm = %.10e\n", global_count, std::sqrt(r.squarednorm()));
+        //printf("Step %d residual norm = %.10e\n", global_count, std::sqrt(r.squarednorm()));
 
 
         // if restart GCR from iter_count=0, wipe all stored directions
@@ -210,14 +235,19 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x, GCR_pa
         // replace one vector in Aps and ps
         Aps[iter_count % storage_size] = Ap;
         ps[iter_count % storage_size] = p;
-    } while (r.squarednorm() > param.tol*param.tol && iter_count<param.max_iter);
+    } while (r.squarednorm() > param.tol*param.tol && global_count<param.max_iter);
 
     free(Aps);
     free(ps);
 
-    if (iter_count==param.max_iter)
-        printf("GCR did not converge after %d steps! Residual norm = %.10e\n", param.max_iter, std::sqrt(r.squarednorm()));
+    if (param.verbose) {
+        if (global_count == param.max_iter)
+            printf("GCR did not converge after %d steps! Residual norm = %.10e\n", param.max_iter,
+                   std::sqrt(r.squarednorm()));
+        else
+            printf("GCR converged after %d steps. Residual norm=%.10e\n", global_count, std::sqrt(r.squarednorm()));
 
+    }
 }
 
 

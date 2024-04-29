@@ -5,6 +5,7 @@
 #ifndef MGPRECONDITIONEDGCR_PARSE_H
 #define MGPRECONDITIONEDGCR_PARSE_H
 
+#include <string>
 #include <iostream>
 #include <fstream>
 #include <complex>
@@ -13,6 +14,6 @@
 
 void parse_data();
 
-Sparse<long> read_data();
+Sparse<long> read_data(const std::string& filename);
 
 #endif //MGPRECONDITIONEDGCR_PARSE_H

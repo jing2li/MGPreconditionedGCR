@@ -2,10 +2,10 @@
 #include <Eigen/Dense>
 #include "Fields.h"
 #include "GCR.h"
-#include "EigenSolver.h"
 #include "utils.h"
 #include "Parse.h"
 #include "Operator.h"
+#include "MG.h"
 #include <random>
 
 void test_fields();
@@ -15,6 +15,10 @@ void test_EigenSolver(const int dim);
 void test_data();
 void test_hermiticity();
 void probe_order();
+void test_dirac();
+void test_kcritical();
+void test_MG();
+
 
 
 int main() {
@@ -26,11 +30,17 @@ int main() {
     //test_fields();
     //test_LA();
     //test_GCR(20, 5);  // test with laplace operator
-    //test_EigenSolver(4);
+    //test_EigenSolver(100);
+    // test_dirac();
 
-    /* Testing properties of matrix*/
-    //test_hermiticity();
-    probe_order();
+    /* 3. Testing properties of matrix*/
+    // test_hermiticity();
+    // probe_order();
+    // test_kcritical();
+
+    /* 4. Testing MG*/
+    test_MG();
+
 
 
     return 0;
@@ -123,69 +133,51 @@ void test_fields() {
 }
 
 void test_EigenSolver(const int dim) {
-    std::cout << "Testing Eigenvector solver of dimension " << dim << " x " << dim << std::endl;
-    // randomise A
-    auto *A = (std::complex<double> *)malloc(sizeof(std::complex<double>) *dim * dim);
+    auto D = new Sparse(read_data("4x4parsed.txt"));
+    auto dirac = new DiracOp(*D, 0.2);
 
-    for (int i = 0; i < dim; i++)
-        for (int j = 0; j < dim; j++) {
-            /*
+    auto A = new std::complex<double>[10000];
+    for (int i = 0; i < 100; i++)
+        for (int j = 0; j < 100; j++) {
             if (i == j)
-                A[i * dim + j] = i;
-            else if (i - j == 1 || j - i == 1)
-                A[i * dim + j] = -j;
-            */
-            A[i*dim + j] = std::complex<double>(rand()%1000/1000., 0);
+                A[i * 100 + j] = 4.;
+            if (i - j == 1 || j - i == 1)
+                A[i * 100 + j] = -1.;
         }
-    Arnoldi arnoldi(A, dim);
-    std::complex<double> *q = (std::complex<double> *)malloc(dim * dim/2 *sizeof(std::complex<double>));
-    arnoldi.maxval_vec(dim/2, q);
-    printf("The reduced basis (%d) with Arnoldi's iteration is: \n", dim/2);
-    std::complex<double> *tmp = (std::complex<double> *)malloc(dim *sizeof(std::complex<double>));
-    for(int i=0; i<dim/2; i++) {
-        for (int j=0; j<dim; j++)
-            std::cout<<q[i*dim + j] << " ";
-        std::cout<<"\n";
-        mat_vec(A, q + i*dim, tmp, dim); // tmp = Ax
-        std::complex<double> const eigenvalue = vec_innprod(q + i*dim, tmp, dim);
-        vec_add(1., tmp, -eigenvalue, q+i*dim, tmp, dim); //tmp = Ax - eigenvalue * x
-        if ( vec_squarednorm(tmp,10).real() < 1e-12) {
-           std::cout<<"is an eigenvector\n";
-        }
-        else{
-            printf("Deviates by %.10e\n", vec_squarednorm(tmp, dim).real());
-        }
+
+    auto A_sparse = new Sparse<long>(100, 100, A);
+
+    auto eigenvecs = new Field<long>[dim];
+
+    GCR_param<long> param = {0, 5, 100, 1e-5, false};
+    Arnoldi eigen_solver(param, dim);
+    eigen_solver.solve(dirac, eigenvecs);
+
+    printf("Print corresponding eigenvalules:\n");
+    for (int i = 0; i < dim; i++) {
+        Field tmp = (*dirac)(eigenvecs[i]);
+        std::complex<double> lambda = tmp.dot(eigenvecs[i]);
+        printf("(%.4f, %.4f)  %.2e\n", lambda.real(), lambda.imag(), std::sqrt(lambda.real()*lambda.real() + lambda.imag()*lambda.imag()));
     }
 
-    std::cout<<"\n";
 
-    printf("The basis of HouseholderQR is: \n");
-    HouseholderQR qr(A, dim);
-    qr.decomp();
-    auto * Q = (std::complex<double>*)malloc(sizeof(std::complex<double>) * dim*dim);
-    qr.get_Q(Q);
-
-    auto *tmp1 = (std::complex<double> *)malloc(dim *sizeof(std::complex<double>));
-    for(int i=0; i<dim; i++) {
-        for (int j=0; j<dim; j++) {
-            std::cout << Q[i * dim + j] << " ";
-            tmp[i] = Q[i * dim + j];
+    Eigen::MatrixXcd A_(100, 100);
+    A_.setZero();
+    for (int i = 0; i < 100; i++)
+        for (int j = 0; j < 100; j++) {
+            if (i == j)
+                A_(i, j) = 4.;
+            if (i - j == 1 || j - i == 1)
+                A_(i, j) = -1.;
         }
-        std::cout<<"\n";
-        mat_vec(A, tmp, tmp1, dim); // tmp = Ax
-        std::complex<double> const eigenvalue = vec_innprod(tmp, tmp1, dim);
-        vec_add(1., tmp1, -eigenvalue, tmp, tmp, dim); //tmp = Ax - eigenvalue * x
-        if ( vec_squarednorm(tmp,10).real() < 1e-12) {
-            std::cout<<"is an eigenvector\n";
-        }
-        else{
-            printf("Deviates by %.10e\n", vec_squarednorm(tmp, dim).real());
-        }
-    }
+    Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A_);
+    std::cout<<"\nEigenvalues according to Eigen library is: \n" << svd.singularValues() <<std::endl;
 
-    free(tmp);
-    free(tmp1);
 
+    delete dirac;
+    delete[] A;
+    delete D;
+    delete[] eigenvecs;
 }
 
 
@@ -214,7 +206,7 @@ void test_GCR(const int dim, const int truncation) {
 
 
     printf("Test base solver: \n");
-    GCR gcr_base(A, dim);
+    GCR<int> gcr_base(A, dim);
     gcr_base.solve(rhs_base, x_base, 1e-12, 100, truncation);
 
 
@@ -230,8 +222,8 @@ void test_GCR(const int dim, const int truncation) {
     auto *S = new Sparse(dim, dim, A);
     Field x_sparse(dims, 1);
     x_sparse.init_rand();
-    GCR<int> gcr_sparse(S);
-    gcr_sparse.solve(rhs, x_sparse, {0, 5, 100, 1e-12});
+    GCR<int> gcr_sparse(S, {0, 5, 100, 1e-12, false, nullptr});
+    gcr_sparse.solve(rhs, x_sparse);
     delete S;
     printf("Test dense solver: \n");
     auto *M = new Dense(A, dim);
@@ -241,8 +233,8 @@ void test_GCR(const int dim, const int truncation) {
     Field x(dims, 1);
     x.init_rand();
 
-    GCR<int> gcr(M);
-    gcr.solve(rhs, x, {truncation, 0, 100, 1e-12});
+    GCR<int> gcr(M, {truncation, 0, 100, 1e-12});
+    gcr.solve(rhs, x);
     delete M;
     std::cout<< "GCR_basic solution:\t";
     for (int i=0; i<dim; i++){
@@ -519,22 +511,22 @@ void test_LA() {
 
 void test_data() {
     //parse_data();
-    Sparse<long> sample_mat = read_data();
+    Sparse<long> sample_mat = read_data("4x4parsed.txt");
 
     auto mat = new Sparse(sample_mat);
-    GCR<long> gcr(mat);
+    GCR<long> gcr(mat, {30, 0, 100, 1e-12});
     long dims[1] = {sample_mat.get_dim()};
     Field<long> rhs(dims, 1);
     rhs.init_rand();
     Field<long> x(dims, 1);
     x.init_rand();
 
-    gcr.solve(rhs, x, {30, 0, 100, 1e-12});
+    gcr.solve(rhs, x);
     delete mat;
 }
 
 void test_hermiticity() {
-    auto mat = new Sparse(read_data());
+    auto mat = new Sparse(read_data("4x4parsed.txt"));
 
     long dims[1] = {(*mat).get_dim()};
     Field<long> v(dims, 1), w(dims, 1);
@@ -564,161 +556,132 @@ void test_hermiticity() {
 }
 
 void probe_order() {
-    auto D = new Sparse(read_data());
+    auto D = new Sparse(read_data("4x4parsed.txt"));
     long dims[1] = {(*D).get_dim()};
     Field<long> probe(dims, 1);
     probe.set_zero();
-    probe.mod_val_at((long)0, 1.);
 
+    long mesh_dim[6] = {4, 4, 4, 4, 4, 3};
+    Mesh dofh(mesh_dim, 6);
+
+    printf("\nProbe with field(0, 0, 0, 0, 0, 0) = 1:\n");
+    probe.mod_val_at((long)12 * 4 * 4 * 4, 1.);
     Field result = (*D)(probe);
-
-    printf("Probe with field(0, 0, 0, 0, 0, 0) = 1:\n");
-
-    // if ordered (t, x, y, z, i, a), 1 - gamma0 = diag(0,0,2,2), 1 + gamma0(2,2,0,0)
-    // (-1, -, -, -, -, -) 4x4x4x4x3 elemtents should be zero
-    // (+1, 0, 0, 0, 0, -)
-    bool pass0 = true;
-    for (int i=0; i<768; i++) {
-        if (norm(result.val_at(768 * 3 + i)) > 1e-14) {
-            pass0 = false;
-            break;
-        }
-    }
-    if (pass0) {printf("All zeros in (-1, -, -, -, -, -)\n");}
-    else {printf("There are non-zeros in (-1, -, -, -, -, -) ordered\n");}
-
-    int count0=0;
-    for (int i=0; i<3; i++) {
-        if (norm(result.val_at(768 + i)) > 1e-14)
-            count0++;
-    }
-    printf("Number of non-zero elements in (1, 0, 0, 0, 0, -) is %d\n", count0);
-    if(pass0 && count0!=0) printf("Can be (t, x, y, z, i, a) ordered\n\n");
-
-
-    bool pass1 = true;
-    for (int i=0; i<12; i++) {
-        if (norm(result.val_at(3072-12+i)) > 1e-14) {
-            pass1 = false;
-            break;
-        }
-    }
-    if (pass1) {printf("All zeros in (-, -, -, -1, -, -)\n");}
-    else {printf("There are non-zeros in (-, -, -, -1, -, -)\n");}
-
-    int count1=0;
-    for (int i=0; i<3; i++) {
-        if (norm(result.val_at(12 + i)) > 1e-14)
-            count1++;
-    }
-    printf("Number of non-zero elements in (0, 0, 0, 1, 0, -) is %d\n", count1);
-    if(pass1 && count1!=0) printf("Can be (x, y, z, t, i, a) ordered\n\n");
-
-
-
-    // due to imaginary elements in gamma-2, we may see imaginary numbers in y=+-1 i=3
-    // (t, x, y, z, i, a) may have imaginary number in (0, 0, -1, 0, 3, -) or (0, 0, 1, 0, 3, -)
-    int count00 = 0;
-    for (int i=0; i<3; i++) {
-        if(result.val_at(3072 - 48 + 9 + i).imag() > 1e-13) {
-            count00++;
-        }
-        if(result.val_at(48 + 9 + i).imag() > 1e-13) {
-            count00++;
-        }
-    }
-    printf("There are %d imaginary numbers in (0, 0, +-1, 0, 3, -)\n", count00);
-
-    int count11 = 0;
-    for (int i=0; i<3; i++) {
-        if(result.val_at(3072 - 192 + 9 + i).imag() > 1e-13) {
-            count11++;
-        }
-        if(result.val_at(192 + 9 + i).imag() > 1e-13) {
-            count11++;
-        }
-    }
-    printf("There are %d imaginary numbers in (0, +-1, 0, 0, 3, -)\n", count11);
-
-    if (count00!=0) printf("Likely to be (t, x, y, z) ordered\n");
-    if (count11!=0) printf("Likely to be (x, y, z, t) ordered\n");
-
-    printf("\nnon-zero elements\n");
+    int count =0;
     for (int i=0; i<3072; i++) {
-        if (norm(result.val_at(i)) > 1e-13) {
-            printf("%d\t", i);
+        if (norm(result.val_at(i)) > 1e-16) {
+            //deep copy index
+            long *index = dofh.alloc_loc_ind(i);
+            printf("(%d, %d, %d, %d, %d)\t", index[0], index[1], index[2], index[3], index[4]);
+            delete[] index;
+            count++;
         }
     }
+    printf("\ntotal number: %d\n", count);
     printf("\nImaginary elements:\n");
     for (int i=0; i<3072; i++) {
-        if (result.val_at(i).imag() > 1e-13) {
-            printf("%d\t", i);
+        if (result.val_at(i).imag() > 1e-16) {
+            long *index = dofh.alloc_loc_ind(i);
+            printf("(%d, %d, %d, %d, %d)\t", index[0], index[1], index[2], index[3], index[4]);
+            delete[] index;
         }
     }
-
-
-    // now probe with i=1
-    printf("\nProbe with field(0, 0, 0, 0, 1, 0) = 1:\n");
-    probe.mod_val_at((long)0, 0.);
-    probe.mod_val_at(3, 1.);
-    result = (*D)(probe);
-
-    // due to imaginary elements in gamma-2, we may see imaginary numbers in y=+-1 i=3
-    // (t, x, y, z, i, a) may have imaginary number in (0, 0, -1, 0, 2, -) or (0, 0, 1, 0, 2, -)
-    int count000 = 0;
-    for (int i=0; i<12; i++) {
-        if(result.val_at(3072 - 48 + 6 + i).imag() > 1e-13) {
-            count000++;
-        }
-        if(result.val_at(48 + 6 + i).imag() > 1e-13) {
-            count000++;
-        }
-    }
-    printf("There are %d imaginary numbers in (0, 0, +-1, 0, 2, -)\n", count000);
-    int count111 = 0;
-    for (int i=0; i<3; i++) {
-        if(result.val_at(3072 - 192 + 6 + i).imag() > 1e-13) {
-            count111++;
-        }
-        if(result.val_at(192 + 6 + i).imag() > 1e-13) {
-            count111++;
-        }
-    }
-    printf("There are %d imaginary numbers in (0, +-1, 0, 0, 2, -)\n", count111);
-    if (count000!=0) printf("likely to be (t, x, y, z) ordered\n");
-    if (count111!=0) printf("Likely to be (x, y, z, t) ordered\n");
-
-
-
-    printf("\nProbe with field(1,0,0,0,0,0) = 0:\n");
-    probe.mod_val_at(3, 0.);
-    probe.mod_val_at(768, 1.);
-    result = (*D)(probe);
-    // due to imaginary elements in gamma-2, we may see imaginary numbers in y=+-1 i=3
-    // (t, x, y, z, i, a) may have imaginary number in (1, 0, -1, 0, 3, -) or (1, 0, 1, 0, 3, -)
-    int c0 = 0;
-    for (int i=0; i<12; i++) {
-        if(result.val_at(768 + 3*48 + 9 + i).imag() > 1e-13) {
-            c0++;
-        }
-        if(result.val_at(768 + 48 + 9 + i).imag() > 1e-13) {
-            c0++;
-        }
-    }
-    printf("There are %d imaginary numbers in (1, 0, +-1, 0, 3, -)\n", count000);
-    int c1 = 0;
-    for (int i=0; i<3; i++) {
-        if(result.val_at(768 + 3 * 192 + 9 + i).imag() > 1e-13) {
-            c1++;
-        }
-        if(result.val_at(768 + 192 + 9 + i).imag() > 1e-13) {
-            c1++;
-        }
-    }
-    printf("There are %d imaginary numbers in (1, +-1, 0, 0, 3, -)\n", count111);
-    if (count000!=0) printf("likely to be (t, x, y, z) ordered\n");
-    if (count111!=0) printf("Likely to be (x, y, z, t) ordered\n");
-
 
     delete D;
+}
+
+
+void test_dirac(){
+    auto D = new Sparse(read_data("4x4parsed.txt"));
+    auto Dirac = new DiracOp(*D, 0.5);
+    long dims[1] = {(*D).get_dim()};
+    Field<long> f(dims, 1);
+    f.init_rand();
+
+    Field result = (*Dirac)(f);
+    Field reference = f - (*D)(f) * 0.5;
+
+    printf("Difference between Dirac Operator and reference = %.5e", (result-reference).squarednorm());
+
+    delete Dirac;
+    delete D;
+}
+
+void test_kcritical() {
+    GCR_param<long> const param = {0, 10, 50000, 1e-13};
+/*
+    printf("Test 4x4 matrix with critical k=0.20611:\n");
+    double step = (0.20611 - 0.2)/5.;
+    auto D = new Sparse(read_data("4x4parsed.txt"));
+    long dims[1] = {D->get_dim()};
+    auto field = new Field<long>(dims, 1);
+    field->init_rand(42);
+
+
+    for (int i=0; i<5; i++) {
+        double const k = 0.2 + step * i;
+        printf("k = %f:", k);
+        DiracOp Dirac(*D, k);
+        Field<long> sol(dims, 1);
+
+        GCR<long> gcr(&Dirac);
+        gcr.solve(*field, sol, param);
+    }
+
+    delete D;
+    delete field;
+     */
+
+
+    printf("\nTest 8x8 matrix with critical k=0.17865:\n");
+    double st = (0.17865- 0.174)/5.;
+    auto D1 = new Sparse(read_data("8x8parsed.txt"));
+    long dims1[1] = {D1->get_dim()};
+    auto field1 = new Field<long>(dims1, 1);
+    field1->init_rand(42);
+
+    for (int i=0; i<5; i++) {
+        double const k = 0.174 + st * i;
+        printf("k = %f:", k);
+        DiracOp Dirac(*D1, k);
+        Field<long> sol(dims1, 1);
+
+        GCR<long> gcr1(&Dirac, param);
+        gcr1.solve(*field1, sol);
+    }
+
+    delete D1;
+    delete field1;
+}
+
+
+void test_MG(){
+    //auto D = new Sparse(read_data("8x8parsed.txt"));
+    auto D = new Sparse(read_data("4x4parsed.txt"));
+    auto Dirac = new DiracOp<long>(*D, 0.17);
+
+    //long dims[6] = {8, 8, 8, 8, 4, 3};
+    long dims[6] = {4, 4, 4, 4, 4, 3};
+    Mesh mesh(dims, 6);
+
+    Field<long> rhs(dims, 6);
+    rhs.init_rand();
+
+    // gcr reference
+    Field<long> x_(dims, 6);
+    x_.init_rand();
+    GCR_param<long> gcr_param = {0, 10, 10000, 1e-13, true};
+    GCR<long> gcr(Dirac, gcr_param);
+    gcr.solve(rhs, x_);
+
+    Field<long> x(dims, 6);
+    x.init_rand();
+    printf("Before difference is %.5e\n", (x-x_).norm());
+    MG_Param<long> param{mesh, 2, 4};
+    MG<long> mg(Dirac, param);
+    mg.solve(rhs, x);
+    printf("After difference is %.5e", (x-x_).norm());
+
+    delete D;
+    delete Dirac;
 }
