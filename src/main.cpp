@@ -658,7 +658,7 @@ void test_kcritical() {
 void test_MG(){
     //auto D = new Sparse(read_data("8x8parsed.txt"));
     auto D = new Sparse(read_data("4x4parsed.txt"));
-    auto Dirac = new DiracOp<long>(*D, 0.17);
+    auto Dirac = new DiracOp<long>(*D, 0.20);
 
     //long dims[6] = {8, 8, 8, 8, 4, 3};
     long dims[6] = {4, 4, 4, 4, 4, 3};
@@ -670,17 +670,17 @@ void test_MG(){
     // gcr reference
     Field<long> x_(dims, 6);
     x_.init_rand();
+    Field x = x_;
     GCR_param<long> gcr_param = {0, 10, 10000, 1e-13, true};
     GCR<long> gcr(Dirac, gcr_param);
     gcr.solve(rhs, x_);
 
-    Field<long> x(dims, 6);
-    x.init_rand();
-    printf("Before difference is %.5e\n", (x-x_).norm());
     MG_Param<long> param{mesh, 2, 4};
-    MG<long> mg(Dirac, param);
-    mg.solve(rhs, x);
-    printf("After difference is %.5e", (x-x_).norm());
+    auto mg = new MG(Dirac, param);
+    //(*mg).solve(rhs, x);
+    GCR_param<long> gcr_param_new = {0, 10, 10000, 1e-13, true, mg};
+    GCR gcr_precond(Dirac, gcr_param_new);
+    gcr_precond.solve(rhs, x);
 
     delete D;
     delete Dirac;

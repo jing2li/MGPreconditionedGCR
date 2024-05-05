@@ -19,4 +19,5 @@ add_executable(MGPreconditionedGCR main.cpp
         Parse.cpp
         Parse.h
         Operator.h
+        HierarchicalSparse.h
 )

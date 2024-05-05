@@ -42,9 +42,9 @@ public:
     Mesh<num_type> get_mesh() const; //
     std::complex<double> val_at(num_type const *index) const; // retrieve field value at an index
     std::complex<double> val_at(num_type const location) const;
-    std::complex<double> val_at(Point<num_type> const point) const;
     void mod_val_at(num_type const *index, std::complex<double> const new_value); // modify field value at index
     void mod_val_at(const num_type location, std::complex<double> const new_value); // modify field value at memory location
+
 
     // Operations
     Field operator+(const Field& f) const;

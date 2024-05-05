@@ -27,8 +27,7 @@ public:
     // load LSE that needs to be solved
     GCR()= default;
     GCR(const std::complex<double> *matrix, const num_type dimension);
-    template <class OPERATOR>
-    explicit GCR(OPERATOR *M, GCR_param<num_type> gcr_param) : A_operator(M), dim(A_operator->get_dim()), param(gcr_param) {};
+    explicit GCR(Operator<num_type> *M, GCR_param<num_type> gcr_param) : A_operator(M), param(gcr_param) {this->dim = A_operator->get_dim();};
 
 
     // solve for Ax = rhs
@@ -47,8 +46,6 @@ private:
     std::complex<double> *A = nullptr;
     Operator<num_type>* A_operator;
     GCR_param<num_type> param;
-
-    num_type dim = 0; // dimension of regular matrix A
 };
 
 template<typename num_type>
@@ -61,37 +58,37 @@ Field<num_type> GCR<num_type>::operator()(const Field<num_type> &f) {
 
 template <typename num_type>
 GCR<num_type>::GCR(const std::complex<double> *matrix, const num_type dimension) {
-    dim = dimension;
-    A = (std::complex<double> *) malloc(sizeof(std::complex<double>) * dim * dim);
-    vec_copy(matrix, A, dim*dim);
+    this->dim = dimension;
+    A = (std::complex<double> *) malloc(sizeof(std::complex<double>) * this->dim * this->dim);
+    vec_copy(matrix, A, this->dim*this->dim);
 }
 
 template <typename num_type>
 void GCR<num_type>::solve(const std::complex<double> *rhs, std::complex<double>* x, const double tol, const int max_iter, const int truncation) {
     // 4 intermediate vector storage required (excl. x)
-    std::complex<double> *p = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
-    std::complex<double> *Ap = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
-    std::complex<double> *r = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
-    std::complex<double> *Ar = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
+    std::complex<double> *p = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>));
+    std::complex<double> *Ap = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>));
+    std::complex<double> *r = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>));
+    std::complex<double> *Ar = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>));
 
     // initialise the 4 intermediate vectors
     // initial r = rhs - Ax
-    std::complex<double> *Ax = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>));
-    mat_vec(A, x, Ax, dim);
-    vec_add(one, rhs, -one, Ax, r, dim);
+    std::complex<double> *Ax = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>));
+    mat_vec(A, x, Ax, this->dim);
+    vec_add(one, rhs, -one, Ax, r, this->dim);
     free(Ax);
     // 1. initialise p
-    vec_copy(r, p, dim);
+    vec_copy(r, p, this->dim);
     // 2. initialise Ap
-    mat_vec(A, p, Ap, dim);
+    mat_vec(A, p, Ap, this->dim);
 
 
     // main loop
     int iter_count = 0;
-    std::complex<double> *Aps = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>) * truncation);
-    vec_copy(Ap, Aps, dim);
-    std::complex<double> *ps = (std::complex<double> *) malloc(dim * sizeof(std::complex<double>) * truncation);
-    vec_copy(p, ps, dim);
+    std::complex<double> *Aps = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>) * truncation);
+    vec_copy(Ap, Aps, this->dim);
+    std::complex<double> *ps = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>) * truncation);
+    vec_copy(p, ps, this->dim);
 
     do {
         iter_count++;
@@ -100,40 +97,40 @@ void GCR<num_type>::solve(const std::complex<double> *rhs, std::complex<double>*
         std::complex<double> alpha, beta;
 
         // find alpha = (r,Ap)/(Ap, Ap)
-        alpha = vec_innprod(r, Ap, dim)/ vec_squarednorm(Ap, dim);
+        alpha = vec_innprod(r, Ap, this->dim)/ vec_squarednorm(Ap, this->dim);
 
         // update x = x + alpha * p; r = r - alpha * Ap
-        vec_add(one, x, alpha, p, x, dim);
-        vec_add(one, r, -alpha, Ap, r, dim);
+        vec_add(one, x, alpha, p, x, this->dim);
+        vec_add(one, r, -alpha, Ap, r, this->dim);
 
         // new Ar
-        mat_vec(A, r, Ar, dim);
+        mat_vec(A, r, Ar, this->dim);
 
         // beta corrections loop
-        std::complex<double> *Ap_tmp = (std::complex<double> *) calloc(dim, sizeof(std::complex<double>));
-        std::complex<double> *p_tmp = (std::complex<double> *) calloc(dim, sizeof(std::complex<double>));
+        std::complex<double> *Ap_tmp = (std::complex<double> *) calloc(this->dim, sizeof(std::complex<double>));
+        std::complex<double> *p_tmp = (std::complex<double> *) calloc(this->dim, sizeof(std::complex<double>));
         int const lim = std::min(truncation, iter_count);
         for (int i = 0; i < lim; i++) {
-            beta = -vec_innprod(Ar, Aps + i * dim, dim) / vec_squarednorm(Aps + i * dim, dim);
-            vec_add(one, p_tmp, beta, ps + i * dim, p_tmp, dim);
-            vec_add(one, Ap_tmp, beta, Aps + i * dim, Ap_tmp, dim);
+            beta = -vec_innprod(Ar, Aps + i * this->dim, this->dim) / vec_squarednorm(Aps + i * this->dim, this->dim);
+            vec_add(one, p_tmp, beta, ps + i * this->dim, p_tmp, this->dim);
+            vec_add(one, Ap_tmp, beta, Aps + i * this->dim, Ap_tmp, this->dim);
         }
-        vec_add(one, p_tmp, one, r, p, dim);
-        vec_add(one, Ap_tmp, one, Ar, Ap, dim);
+        vec_add(one, p_tmp, one, r, p, this->dim);
+        vec_add(one, Ap_tmp, one, Ar, Ap, this->dim);
 
         free(Ap_tmp);
         free(p_tmp);
 
-        vec_copy(Ap, Aps + (iter_count%truncation) * dim, dim);
-        vec_copy(p, ps + (iter_count%truncation) * dim, dim);
+        vec_copy(Ap, Aps + (iter_count%truncation) * this->dim, this->dim);
+        vec_copy(p, ps + (iter_count%truncation) * this->dim, this->dim);
 
 
-        printf("Step %d residual norm = %.10e\n", iter_count, std::sqrt(vec_squarednorm(r, dim).real()));
+        printf("Step %d residual norm = %.10e\n", iter_count, std::sqrt(vec_squarednorm(r, this->dim).real()));
 
-    } while (vec_squarednorm(r, dim).real() > tol && iter_count<max_iter);
+    } while (vec_squarednorm(r, this->dim).real() > tol && iter_count<max_iter);
 
     if (iter_count==max_iter)
-        printf("GCR did not converge after %d steps! Residual norm = %.10e\n", max_iter, vec_squarednorm(r, dim).real());
+        printf("GCR did not converge after %d steps! Residual norm = %.10e\n", max_iter, vec_squarednorm(r, this->dim).real());
 
     // free memory
     free(p);
@@ -146,8 +143,8 @@ void GCR<num_type>::solve(const std::complex<double> *rhs, std::complex<double>*
 
 template <typename num_type>
 void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
-    assertm(rhs.field_size() == dim, "Field dimension does not match with Operator!");
-    assertm(x.field_size() == dim, "x dimension does not match with Operator!");
+    assertm(rhs.field_size() == this->dim, "Field dimension does not match with Operator!");
+    assertm(x.field_size() == this->dim, "x dimension does not match with Operator!");
     if(param.truncation==0 && param.restart == 0 && param.verbose) {
         printf("WARNING: Full GCR solve could incur high memory usage!\n");
     }
@@ -220,7 +217,8 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
         Ap = Ar + Ap_corr;
 
 
-        //printf("Step %d residual norm = %.10e\n", global_count, std::sqrt(r.squarednorm()));
+        if (param.verbose)
+            printf("Step %d residual norm = %.10e\n", global_count, std::sqrt(r.squarednorm()));
 
 
         // if restart GCR from iter_count=0, wipe all stored directions

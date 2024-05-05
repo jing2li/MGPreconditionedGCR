@@ -35,8 +35,8 @@ public:
     num_type* alloc_spacetime_dim(const bool* blocked_dimensions); // get 4d spacetime dimensions
     num_type get_nblocks() const // number of subblocks in the domain
         {return block_dim[0] * block_dim[1] * block_dim[2] * block_dim[3];};
-    num_type* get_block_dim() // number of lattice point per block dimension
-        {return block_dim;};
+    int* get_block_dim() // number of lattice point per block dimension
+        {return (int *)block_dim;};
     num_type get_block_size() // number of lattice points in a block
         {return sub_dim*sub_dim*sub_dim*sub_dim;};
     num_type* get_block_map(num_type block_idx) {return block_map[block_idx];};
@@ -56,8 +56,8 @@ private:
     num_type *dim = NULL; // a vector of dimension in each direction
     num_type size = 0; // number of complex values
     num_type sub_dim = 0;
-    num_type blocked_ind[4];
-    num_type block_dim[4] = {0}; // number of blocks in spacetime direction
+    int blocked_ind[4];
+    int block_dim[4] = {0}; // number of blocks in spacetime direction
     num_type** block_map = NULL; // map from local index to spacetime index
 };
 
@@ -167,19 +167,18 @@ num_type* Mesh<num_type>::alloc_spacetime_dim(const bool *blocked_dimensions) {
 template <typename num_type>
 void Mesh<num_type>::blocking(const num_type subblock_dim, const bool *blocked_dimensions) {
     sub_dim = subblock_dim;
-    int spacetime_count=0;
-    for (int i=0; i<ndim; i++) {
-        if (blocked_dimensions[i]){
-            blocked_ind[spacetime_count] = i;
-            spacetime_count++;
-        }
-    }
 
     // number of lattice points in spacetime
     num_type spacetime_nid = 1;
-    for (int d = 0; d < 4; d++) {
-        assertm(dim[blocked_dimensions[d]] % subblock_dim == 0, "Dimension not exactly divisible by block size!");
-        spacetime_nid *= dim[blocked_dimensions[d]];
+    int spacetime_count=0;
+    for (int i=0; i<ndim; i++) {
+        if (blocked_dimensions[i]){
+            assertm(dim[i] % subblock_dim == 0, "Dimension not exactly divisible by block size!");
+            blocked_ind[spacetime_count] = i;
+            spacetime_nid *= dim[i];
+            block_dim[spacetime_count] = dim[i]/subblock_dim;
+            spacetime_count++;
+        }
     }
 
     // number of points in a subblock
@@ -187,12 +186,6 @@ void Mesh<num_type>::blocking(const num_type subblock_dim, const bool *blocked_d
 
     // #points in each direction
     num_type* spacetime_dims = alloc_spacetime_dim(blocked_dimensions);
-
-    // #subblock in the domain in each direction
-    block_dim[0] = dim[blocked_dimensions[0]]/subblock_dim;
-    block_dim[1] = dim[blocked_dimensions[1]]/subblock_dim;
-    block_dim[2] = dim[blocked_dimensions[2]]/subblock_dim;
-    block_dim[3] = dim[blocked_dimensions[3]]/subblock_dim;
 
     // #sites in a subblock in each direction
     num_type const thread_dim[4] = {subblock_dim, subblock_dim, subblock_dim, subblock_dim};
@@ -205,10 +198,10 @@ void Mesh<num_type>::blocking(const num_type subblock_dim, const bool *blocked_d
     }
 
     // loop over all spacetime {x, y, z, w}
-    for (num_type x=0; x<dim[blocked_dimensions[0]]; x++){
-        for (num_type y=0; y<dim[blocked_dimensions[1]]; y++){
-            for (num_type z=0; z<dim[blocked_dimensions[2]]; z++){
-                for (num_type w=0; w<dim[blocked_dimensions[3]]; w++){
+    for (num_type x=0; x<dim[blocked_ind[0]]; x++){
+        for (num_type y=0; y<dim[blocked_ind[1]]; y++){
+            for (num_type z=0; z<dim[blocked_ind[2]]; z++){
+                for (num_type w=0; w<dim[blocked_ind[3]]; w++){
                     // current spacetime index
                     num_type const spacetime_id[4] = {x, y, z, w};
 
@@ -216,14 +209,14 @@ void Mesh<num_type>::blocking(const num_type subblock_dim, const bool *blocked_d
                     num_type const spacetime_loc = ind_loc(spacetime_id, spacetime_dims, 4);
 
                     //block index
-                    num_type const block_id[4] = {x/subblock_dim, y/subblock_dim, z/subblock_dim, w/subblock_dim};
+                    int const block_id[4] = {x/subblock_dim, y/subblock_dim, z/subblock_dim, w/subblock_dim};
 
                     // remainder elements
                     num_type const extra_thread[4] = {x%subblock_dim, y%subblock_dim, z%subblock_dim, w%subblock_dim};
 
                     // memory location
-                    num_type const block_loc = ind_loc(block_id, block_dim, 4);
-                    num_type const offset_loc = ind_loc(extra_thread, thread_dim, 4);
+                    int const block_loc = Mesh<int>::ind_loc(block_id, block_dim, 4);
+                    num_type offset_loc = ind_loc(extra_thread, thread_dim, 4);
 
                     // maps blocked layout to spacetime layout
                     block_map[block_loc][offset_loc] = spacetime_loc;
