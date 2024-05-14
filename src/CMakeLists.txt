@@ -3,7 +3,8 @@ project(MGPreconditionedGCR LANGUAGES CXX CUDA)
 
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_FLAGS "-O3 -Wall")
+set(CMAKE_CXX_FLAGS "-O3 -fopenmp")
+set(CMAKE_CUDA_FLAGS "")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}")
 
 # Set the path to the Eigen library
@@ -20,4 +21,6 @@ add_executable(MGPreconditionedGCR main.cpp
         Parse.h
         Operator.h
         HierarchicalSparse.h
+        cuda.cu
+        SolverParam.h
 )

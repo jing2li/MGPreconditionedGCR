@@ -18,6 +18,8 @@ void probe_order();
 void test_dirac();
 void test_kcritical();
 void test_MG();
+void test_MG_precompute();
+void k_critical_mg_precond();
 
 
 
@@ -39,14 +41,16 @@ int main() {
     // test_kcritical();
 
     /* 4. Testing MG*/
-    test_MG();
+    //test_MG();
+    //test_MG_precompute();
+    k_critical_mg_precond();
 
 
 
     return 0;
 }
 
-
+/*
 void test_fields() {
     std::cout<< "--------------------------------------------------------\n";
     std::cout<< "Testing functions in Fields:\n";
@@ -149,8 +153,8 @@ void test_EigenSolver(const int dim) {
 
     auto eigenvecs = new Field<long>[dim];
 
-    GCR_param<long> param = {0, 5, 100, 1e-5, false};
-    Arnoldi eigen_solver(param, dim);
+    GCR_Param<long> param(0, 5, 100, 1e-5, false, nullptr, nullptr, nullptr, nullptr);
+    Arnoldi eigen_solver(&param, dim);
     eigen_solver.solve(dirac, eigenvecs);
 
     printf("Print corresponding eigenvalules:\n");
@@ -222,7 +226,8 @@ void test_GCR(const int dim, const int truncation) {
     auto *S = new Sparse(dim, dim, A);
     Field x_sparse(dims, 1);
     x_sparse.init_rand();
-    GCR<int> gcr_sparse(S, {0, 5, 100, 1e-12, false, nullptr});
+    GCR_Param<int> param(0, 5, 100, 1e-12, false, nullptr, nullptr, nullptr, nullptr);
+    GCR<int> gcr_sparse(S, &param);
     gcr_sparse.solve(rhs, x_sparse);
     delete S;
     printf("Test dense solver: \n");
@@ -233,7 +238,8 @@ void test_GCR(const int dim, const int truncation) {
     Field x(dims, 1);
     x.init_rand();
 
-    GCR<int> gcr(M, {truncation, 0, 100, 1e-12});
+    param.truncation = truncation;
+    GCR<int> gcr(M, &param);
     gcr.solve(rhs, x);
     delete M;
     std::cout<< "GCR_basic solution:\t";
@@ -514,7 +520,8 @@ void test_data() {
     Sparse<long> sample_mat = read_data("4x4parsed.txt");
 
     auto mat = new Sparse(sample_mat);
-    GCR<long> gcr(mat, {30, 0, 100, 1e-12});
+    GCR_Param<long> param(30, 0, 100, 1e-12, true, nullptr, nullptr, nullptr, nullptr);
+    GCR<long> gcr(mat, &param);
     long dims[1] = {sample_mat.get_dim()};
     Field<long> rhs(dims, 1);
     rhs.init_rand();
@@ -608,8 +615,8 @@ void test_dirac(){
 }
 
 void test_kcritical() {
-    GCR_param<long> const param = {0, 10, 50000, 1e-13};
-/*
+    GCR_Param<long> const param(0, 10, 50000, 1e-13, false, nullptr, nullptr, nullptr, nullptr);
+
     printf("Test 4x4 matrix with critical k=0.20611:\n");
     double step = (0.20611 - 0.2)/5.;
     auto D = new Sparse(read_data("4x4parsed.txt"));
@@ -630,7 +637,7 @@ void test_kcritical() {
 
     delete D;
     delete field;
-     */
+
 
 
     printf("\nTest 8x8 matrix with critical k=0.17865:\n");
@@ -646,7 +653,7 @@ void test_kcritical() {
         DiracOp Dirac(*D1, k);
         Field<long> sol(dims1, 1);
 
-        GCR<long> gcr1(&Dirac, param);
+        GCR<long> gcr1(&Dirac, &param);
         gcr1.solve(*field1, sol);
     }
 
@@ -657,11 +664,11 @@ void test_kcritical() {
 
 void test_MG(){
     //auto D = new Sparse(read_data("8x8parsed.txt"));
-    auto D = new Sparse(read_data("4x4parsed.txt"));
-    auto Dirac = new DiracOp<long>(*D, 0.20);
+    auto D = new Sparse(read_data("8x8parsed.txt"));
+    auto Dirac = new DiracOp<long>(*D, 0.17);
 
-    //long dims[6] = {8, 8, 8, 8, 4, 3};
-    long dims[6] = {4, 4, 4, 4, 4, 3};
+    long dims[6] = {8, 8, 8, 8, 4, 3};
+    //long dims[6] = {4, 4, 4, 4, 4, 3};
     Mesh mesh(dims, 6);
 
     Field<long> rhs(dims, 6);
@@ -671,17 +678,115 @@ void test_MG(){
     Field<long> x_(dims, 6);
     x_.init_rand();
     Field x = x_;
-    GCR_param<long> gcr_param = {0, 10, 10000, 1e-13, true};
-    GCR<long> gcr(Dirac, gcr_param);
-    gcr.solve(rhs, x_);
+    GCR_Param<long> gcr_param(0, 10, 10000, 1e-13, false, nullptr, nullptr, nullptr, nullptr);
+    GCR<long> gcr(Dirac, &gcr_param);
+    //gcr.solve(rhs, x_);
 
-    MG_Param<long> param{mesh, 2, 4};
-    auto mg = new MG(Dirac, param);
+    GCR_Param<long> eigen(0, 10, 1, 1e-8, false, nullptr, nullptr, nullptr, nullptr);
+    GCR_Param<long> coarse(0, 10, 100, 1e-8, false, nullptr, nullptr, nullptr, nullptr);
+    GCR_Param<long> smooth(0, 10, 2, 1e-8, false, nullptr, nullptr, nullptr, nullptr);
+
+    auto solver_c = new GCR<long>();
+    auto solver_s = new GCR<long>();
+
+    MG_Param<long> param(mesh, 4, 5, &eigen, coarse, solver_c, smooth, solver_s, 1, nullptr, nullptr, nullptr, nullptr);
+    //auto mg = new MG(Dirac, &param);
     //(*mg).solve(rhs, x);
-    GCR_param<long> gcr_param_new = {0, 10, 10000, 1e-13, true, mg};
-    GCR gcr_precond(Dirac, gcr_param_new);
+    auto mg_ptr = new MG();
+    GCR_Param<long> gcr_param_new (0, 10, 1000, 1e-13, true, nullptr, param, nullptr, mg_ptr);
+    GCR gcr_precond(Dirac, &gcr_param_new);
     gcr_precond.solve(rhs, x);
 
     delete D;
     delete Dirac;
+}
+*/
+
+
+void test_MG_precompute() {
+    auto D = new Sparse(read_data("8x8parsed.txt"));
+    auto Dirac = new DiracOp<long>(*D, 0.17);
+
+    //long dims[6] = {4, 4, 4, 4, 4, 3};
+    long dims[6] = {8, 8, 8, 8, 4, 3};
+    Mesh mesh(dims, 6);
+
+    auto eigen = new GCR_Param<long>(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    auto coarse = new GCR_Param<long>(0, 10, 100, 1e-8, false, nullptr, nullptr);
+    auto smooth = new GCR_Param<long>(0, 10, 2, 1e-8, false,nullptr, nullptr);
+
+    for (int n_eigen=2; n_eigen<11; n_eigen++) {
+        auto solver_coarse = new GCR(coarse);
+        auto solver_smooth = new GCR(smooth);
+
+        auto param = new MG_Param<long>(mesh, 2, n_eigen, eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+        auto mg = new MG(Dirac, param);
+
+
+        double diff = 0;
+        for (int exp = 0; exp < 5; exp++) {
+            Field<long> random(dims, 6);
+            random.init_rand(exp * 20);
+
+            // test P.dagger() * P * random  = random
+            Field<long> begin = mg->restrict(random);
+            Field<long> intermediate = mg->expand(begin);
+            Field<long> final = mg->restrict(intermediate);
+            double const difference = (final - begin).norm() / begin.norm();
+            printf("difference after multiplying P.dagger() * P = %.5e\n", difference);
+            diff += difference;
+        }
+
+        printf("average difference = %.5e\n\n", diff / 5);
+
+        delete solver_coarse;
+        delete solver_smooth;
+        delete param;
+    }
+    delete eigen;
+    delete smooth;
+    delete coarse;
+    delete D;
+    delete Dirac;
+}
+
+void k_critical_mg_precond() {
+    long dims[6] = {8, 8, 8, 8, 4, 3};
+    Mesh mesh(dims, 6);
+    auto D = new Sparse(read_data("8x8parsed.txt"));
+
+
+    auto eigen = new GCR_Param<long>(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    auto coarse = new GCR_Param<long>(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    auto smooth = new GCR_Param<long>(0, 10, 1, 1e-8, false,nullptr, nullptr);
+    auto solver_coarse = new GCR(coarse);
+    auto solver_smooth = new GCR(smooth);
+
+    auto param = new MG_Param<long>(mesh, 4, 2, eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+
+    double const st = (0.17865- 0.05)/20.;
+    for (int exp=0; exp<21; exp++) {
+        double const k = 0.05 + exp * st;
+        printf("k number %d\n", exp);
+        auto Dirac = new DiracOp<long>(*D, k);
+
+        Field<long> rhs(dims, 6);
+        rhs.init_rand(42);
+
+        auto mg = new MG(param);
+
+        auto gcr_param_new = new GCR_Param<long>(0, 10, 2000, 1e-13, true, nullptr, mg);
+        //auto gcr_param_new = new GCR_Param<long>(0, 10, 4000, 1e-13, true, nullptr, nullptr);
+
+        GCR gcr_precond(Dirac, gcr_param_new);
+        Field x = gcr_precond(rhs);
+
+        delete Dirac;
+        delete gcr_param_new;
+    }
+
+    delete solver_coarse;
+    delete solver_smooth;
+    delete param;
+    delete D;
 }

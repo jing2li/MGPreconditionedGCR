@@ -19,6 +19,7 @@ public:
     virtual Field<num_type> operator()(const Field<num_type> &) = 0;
 
     [[nodiscard]] num_type get_dim() const {return dim;};
+    virtual void initialise(Operator * op) {};
     [[nodiscard]] virtual std::complex<double> val_at(num_type location) const=0;
     [[nodiscard]] virtual std::complex<double> val_at(num_type row, num_type col) const=0;
 protected:

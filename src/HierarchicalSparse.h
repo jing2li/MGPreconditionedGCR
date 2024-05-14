@@ -15,7 +15,7 @@
 #include "Fields.h"
 #include "utils.h"
 #include "Operator.h"
-
+#include <omp.h>
 
 // CRS sparse storage of blocked matrix.
 // There could be multiple blocks with same (row, col) placed next to each other!
@@ -184,6 +184,13 @@ Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<
     // isolate f_block
     coarse_num_type const block_dim[1]= {sub_dim};
     auto f_block = new Field<coarse_num_type>[nrow];
+
+    auto output_block = new Field<coarse_num_type>[nrow];
+
+    omp_set_num_threads(14);
+#pragma omp parallel
+{
+#pragma omp for
     for (coarse_num_type i=0; i<nrow; i++){
         f_block[i] = Field<coarse_num_type>(block_dim, 1);
         coarse_num_type source_offset = i * sub_dim; // scalar replacement
@@ -193,8 +200,8 @@ Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<
     }
 
     // modification to output
-    auto output_block = new Field<coarse_num_type>[nrow];
     // Loop over block rows
+#pragma omp for
     for (coarse_num_type row=0; row<nrow; row++) {
         output_block[row] = Field<coarse_num_type>(block_dim, 1);
         // loop over block cols
@@ -205,15 +212,17 @@ Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<
             output_block[row] += (*VAL[l])(f_block[col]);
         }
     }
-    delete[] f_block;
 
     // add to output
+#pragma omp for
     for (coarse_num_type i=0; i<nrow; i++) {
         num_type const dest_offset = i * sub_dim;
         for (coarse_num_type sub_id = 0; sub_id < sub_dim; sub_id++) {
             output.mod_val_at(dest_offset + sub_id, output_block[i].val_at(sub_id));
         }
     }
+}
+    delete[] f_block;
     delete []output_block;
     return output;
 }

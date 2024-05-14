@@ -56,6 +56,7 @@ public:
     Field &operator=(const Field& f) noexcept;
     Field &operator+=(const Field& f);
     Field &operator-=(const Field& f);
+    void normalise();
     Field gamma5(int spinor_index) const; // left multiply with gamma5
     void dagger();
 
@@ -256,7 +257,7 @@ Field<num_type> Field<num_type>::operator-(const Field& f) const {
 template <typename num_type>
 std::complex<double> Field<num_type>::dot(const Field& f) const {
     assertm(this->field_size() == f.field_size(), "Lengths of two fields do not match!");
-    num_type* f_dim = f.get_dim();
+    //num_type* f_dim = f.get_dim();
     
     //assertm(daggered == true, "Require first field to be daggered!");
 
@@ -275,6 +276,14 @@ template <typename num_type>
         norm += conj(field[i]) * field[i];
     }
     return norm.real();
+}
+
+template<typename num_type>
+void Field<num_type>::normalise() {
+    double const norm = this->norm();
+    for (num_type i=0; i<field_size(); i++) {
+        field[i] *= 1./norm;
+    }
 }
 
 template <typename num_type>

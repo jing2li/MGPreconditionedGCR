@@ -35,7 +35,7 @@ public:
     num_type* alloc_spacetime_dim(const bool* blocked_dimensions); // get 4d spacetime dimensions
     num_type get_nblocks() const // number of subblocks in the domain
         {return block_dim[0] * block_dim[1] * block_dim[2] * block_dim[3];};
-    int* get_block_dim() // number of lattice point per block dimension
+    int* get_block_dim() // number of blocks in each dimension
         {return (int *)block_dim;};
     num_type get_block_size() // number of lattice points in a block
         {return sub_dim*sub_dim*sub_dim*sub_dim;};
