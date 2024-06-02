@@ -22,17 +22,6 @@
 template <typename num_type, typename coarse_num_type>
 class HierarchicalSparse: public Operator<num_type> {
 public:
-    /*
-    HierarchicalSparse()= default;
-    explicit HierarchicalSparse(num_type rows){ROW = (num_type *) malloc(sizeof(num_type) *(rows+1)); nrow=rows; this->dim=rows;}; //empty constructor
-    HierarchicalSparse(num_type rows, num_type cols, num_type nnz) {nrow = rows, this->dim = cols; ROW = (num_type *) malloc(sizeof(num_type) *(rows+1)); ROW[rows] = nnz; nrow=rows; this->dim=cols;
-        COL = (num_type *) malloc(sizeof(num_type) *nnz); VAL = (std::complex<double> *) malloc(sizeof(std::complex<double>)*nnz);};
-    HierarchicalSparse(Sparse const &matrix);
-    HierarchicalSparse(num_type rows, num_type cols, num_type * row, num_type * col, std::complex<double>* val) {nrow = rows, this->dim = cols; ROW = row, COL = col, VAL = val;};
-    // Dense -> Sparse
-    HierarchicalSparse(num_type rows, num_type cols, std::complex<double> *matrix);
-    */
-
     // unordered Triplet -> Sparse
     HierarchicalSparse(coarse_num_type block_rows, coarse_num_type block_cols, std::pair<Operator<coarse_num_type>*, std::pair<coarse_num_type, coarse_num_type>> *triplets, coarse_num_type triplet_length);
 
@@ -44,26 +33,12 @@ public:
     // using val_at() on a HierarchicalSparse is not recommended due to ambiguity of what it can mean
     [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override; // value at (row, col)
     [[nodiscard]] std::complex<double> val_at(num_type location) const override; // value at memory location
-    //[[nodiscard]] num_type get_COL(num_type location) const {return COL[location];};
-    //[[nodiscard]] num_type get_ROW(num_type location) const {return ROW[location];};
 
-
-    /*
-    // for initialisation
-    void mod_COL_at(num_type location, num_type val) const {COL[location] = val;};
-    void mod_ROW_at(num_type location, num_type val) const {ROW[location] = val;};
-    void mod_VAL_at(num_type location, std::complex<double> val) const {VAL[location] = val;}
-    */
 
     // Sparse matrix linear algebra
     Field<num_type> operator()(Field<num_type> const &f) override; // matrix vector multiplication
-    /*
-    Sparse& operator=(const Sparse& mat) noexcept; // Deep copy
-    Sparse operator+(Sparse const &M) const; // Sparse matrix addition
-    Sparse operator-(Sparse const &M) const; // Sparse matrix subtraction
-    Sparse operator*(std::complex<double> a) const; // multiplication by constant
-    */
-    ~HierarchicalSparse();
+
+    ~HierarchicalSparse() override;
 
 protected:
     Operator<coarse_num_type> **VAL = NULL; // an array of Operator pointers
@@ -72,64 +47,6 @@ protected:
     coarse_num_type nrow=0; // number of block rows
 };
 
-
-/*
-template <typename num_type>
-Sparse<num_type>::Sparse(num_type rows, num_type cols, std::complex<double> *dense) {
-    nrow=rows;
-    this->dim=cols;
-    ROW = (num_type *) malloc(sizeof(num_type) *(rows+1));
-
-    // count the number of NNZ
-    num_type NNZ=0;
-    for (num_type row = 0; row < rows; row++) {
-        ROW[row] = NNZ; // ponum_types to the first value in the row
-        for(num_type col=0; col < cols; col++) {
-            if (dense[row*cols+col] != 0.) {
-                NNZ++;
-            }
-        }
-    }
-
-    ROW[rows] = NNZ;
-
-    // second loop to fill column indices and value
-    COL = (num_type *) malloc(sizeof(num_type) *NNZ);
-    VAL = (std::complex<double> *) malloc(sizeof(std::complex<double>) *NNZ);
-
-    num_type id = 0;
-    for (num_type row = 0; row < rows; row++) {
-        for(num_type col=0; col < cols; col++) {
-            if (dense[row*cols+col] != 0.) {
-                COL[id] = col;
-                VAL[id] = dense[row*cols+col];
-                id++;
-            }
-        }
-    }
-
-}
-
-template <typename num_type>
-Sparse<num_type>::Sparse(const Sparse &matrix) {
-    nrow = matrix.nrow;
-    this->dim = matrix.dim;
-    num_type const nnz = matrix.get_nnz();
-
-    ROW = (num_type *) malloc(sizeof(num_type) *(nrow+1));
-    ROW[nrow] = nnz;
-    for (num_type i=0; i<nrow; i++) {
-        ROW[i] = matrix.ROW[i];
-    }
-
-    COL = (num_type *) malloc(sizeof(num_type) * nnz);
-    VAL = (std::complex<double> *) malloc(nnz * sizeof(std::complex<double>));
-
-    for (num_type i=0; i<nnz; i++) {
-        COL[i] = matrix.COL[i];
-        VAL[i] = matrix.VAL[i];
-    }
-}*/
 
 template <typename num_type, typename coarse_num_type>
 HierarchicalSparse<num_type, coarse_num_type>::HierarchicalSparse(coarse_num_type block_rows, coarse_num_type block_cols, std::pair<Operator<coarse_num_type>*, std::pair<coarse_num_type, coarse_num_type>> *triplets, coarse_num_type triplet_length) {
@@ -177,22 +94,29 @@ HierarchicalSparse<num_type, coarse_num_type>::HierarchicalSparse(coarse_num_typ
 template <typename num_type, typename coarse_num_type>
 Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<num_type> const &f){
     assertm(this->dim == f.field_size(), "Sparse matrix dimension does not match Field dimension!");
-    Field output(f.get_dim(), f.get_ndim());
+    // returns output = M(f)
+    Field output(f.get_mesh());
     // dim of subblock
     coarse_num_type const sub_dim = VAL[0]->get_dim();
 
     // isolate f_block
     coarse_num_type const block_dim[1]= {sub_dim};
     auto f_block = new Field<coarse_num_type>[nrow];
+    for (coarse_num_type i=0; i<nrow; i++) {
+        f_block[i] = Field<coarse_num_type>(block_dim, 1);
+    }
 
     auto output_block = new Field<coarse_num_type>[nrow];
+    for (coarse_num_type row=0; row<nrow; row++) {
+        output_block[row] = Field<coarse_num_type>(block_dim, 1);
+    }
 
-    omp_set_num_threads(14);
+        omp_set_num_threads(14);
 #pragma omp parallel
 {
+    // slice f into blocks
 #pragma omp for
     for (coarse_num_type i=0; i<nrow; i++){
-        f_block[i] = Field<coarse_num_type>(block_dim, 1);
         coarse_num_type source_offset = i * sub_dim; // scalar replacement
         for (coarse_num_type sub_id=0; sub_id<sub_dim; sub_id++) {
             f_block[i].mod_val_at(sub_id, f.val_at(source_offset + sub_id));
@@ -203,17 +127,19 @@ Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<
     // Loop over block rows
 #pragma omp for
     for (coarse_num_type row=0; row<nrow; row++) {
-        output_block[row] = Field<coarse_num_type>(block_dim, 1);
+        Field value(block_dim, 1); // scalar replacement
+        value.set_zero();
         // loop over block cols
         for(coarse_num_type l=ROW[row]; l < ROW[row+1]; l++) {
             coarse_num_type const col = COL[l];
 
             // apply sub-operator on rhs_blocked
-            output_block[row] += (*VAL[l])(f_block[col]);
+            value += (*VAL[l])(f_block[col]);
         }
+        output_block[row] = value;
     }
 
-    // add to output
+    // reconstruct output from output_block
 #pragma omp for
     for (coarse_num_type i=0; i<nrow; i++) {
         num_type const dest_offset = i * sub_dim;
@@ -223,53 +149,9 @@ Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<
     }
 }
     delete[] f_block;
-    delete []output_block;
+    delete[] output_block;
     return output;
 }
-
-/*
-template <typename num_type>
-Sparse<num_type>& Sparse<num_type>::operator=(const Sparse& matrix) noexcept{
-    assertm(matrix.VAL != nullptr, "RHS Sparse matrix is null!");
-    if (this->dim==0) { // initialise if LHS uninitialised
-        nrow = matrix.nrow;
-        this->dim = matrix.dim;
-        num_type const nnz = matrix.get_nnz();
-
-        ROW = (num_type *) malloc(sizeof(num_type) * (nrow + 1));
-        ROW[nrow] = nnz;
-        for (num_type i = 0; i < nrow; i++) {
-            ROW[i] = matrix.ROW[i];
-        }
-
-        COL = (num_type *) malloc(sizeof(num_type) * nnz);
-        VAL = (std::complex<double> *) malloc(nnz * sizeof(std::complex<double>));
-
-        for (num_type i = 0; i < nnz; i++) {
-            COL[i] = matrix.COL[i];
-            VAL[i] = matrix.VAL[i];
-        }
-    }
-    else {
-        assertm(nrow = matrix.nrow && this->dim== matrix.dim, "Dimensions of LHS and RHS do not match!");
-
-        // reallocate space and copy
-        num_type const nnz = matrix.get_nnz();
-        ROW = (num_type *)realloc(ROW, sizeof(num_type) * (nrow + 1));
-        for (num_type i = 0; i < nrow; i++) {
-            ROW[i] = matrix.ROW[i];
-        }
-        COL = (num_type *) realloc(COL, sizeof(num_type) * nnz);
-        VAL = (std::complex<double> *) realloc(VAL, nnz * sizeof(std::complex<double>));
-
-        for (num_type i = 0; i < nnz; i++) {
-            COL[i] = matrix.COL[i];
-            VAL[i] = matrix.VAL[i];
-        }
-    }
-    return *this;
-}
-*/
 
 
 template <typename num_type, typename coarse_num_type>
@@ -298,155 +180,15 @@ std::complex<double> HierarchicalSparse<num_type, coarse_num_type>::val_at(num_t
     return VAL[block_id]->val_at(offset);
 }
 
-/*
-template <typename num_type>
-Sparse<num_type> Sparse<num_type>::operator+(const Sparse &M) const {
-    assertm(M.nrow == nrow && M.dim == this->dim, "Matrix dimensions do not match!");
-
-    auto *ROW_new = (num_type *) calloc((nrow+1), sizeof(num_type));
-
-    num_type nnz = 0, count0=0, count1=0, row0 = 0, row1=0;
-    ROW_new[0] = 0;
-    // count number of non-zero entries
-    while(row0 < nrow || row1<nrow) {
-        // smaller column index is first copied, if same index add together
-        if (row0*this->dim + M.COL[count0] < row1*this->dim + COL[count1]) {
-            count0++;
-        }
-        else if (row0*this->dim+M.COL[count0] == row1*this->dim + COL[count1]) {
-            count0++;
-            count1++;
-        }
-        else {
-            count1++;
-        }
-        nnz++;
-        if (count0 == M.ROW[row0+1]) row0++;
-        if (count1 == ROW[row1+1]) row1++;
-        if(row1==row0 && ROW_new[row0]==0)
-            ROW_new[row0] = nnz;
-    }
-
-    Sparse output(nrow, this->dim, ROW_new[nrow]);
-    for (num_type i=0; i<row0+1; i++) {
-        output.mod_ROW_at(i, ROW_new[i]);
-    }
-    free(ROW_new);
-
-    // fill VAL and COL
-    num_type r0=0, r1=0, c0=0, c1=0;
-    num_type len=0;
-    while(r0 < nrow || r1<nrow) {
-        // smaller column index is first copied, if same index add together
-        num_type column;
-        std::complex<double> value;
-        if (r0*this->dim + M.COL[c0] < r1*this->dim + COL[c1]) {
-            column = M.get_COL(c0);
-            value = M.val_at(c0);
-            c0++;
-        }
-        else if (r0*this->dim+M.COL[c0] == r1*this->dim + COL[c1]) {
-            column = COL[c1];
-            value = M.val_at(c0)+VAL[c1];
-            c0++;
-            c1++;
-        }
-        else {
-            column = COL[c1];
-            value = VAL[c1];
-            c1++;
-        }
-        output.mod_COL_at(len, column);
-        output.mod_VAL_at(len, value);
-        len++;
-        if (c0 == M.ROW[r0+1]) r0++;
-        if (c1 == ROW[r1+1]) r1++;
-    }
-    return output;
-}
-
-template <typename num_type>
-Sparse<num_type> Sparse<num_type>::operator-(Sparse const &M) const {
-    assertm(M.nrow == nrow && M.dim == this->dim, "Matrix dimensions do not match!");
-
-    auto *ROW_new = (num_type *) calloc((nrow+1), sizeof(num_type));
-
-    num_type nnz = 0, count0=0, count1=0, row0 = 0, row1=0;
-    ROW_new[0] = 0;
-    // count number of non-zero entries
-    while(row0 < nrow || row1<nrow) {
-        // smaller column index is first copied, if same index add together
-        if (row0*this->dim + M.COL[count0] < row1*this->dim + COL[count1]) {
-            count0++;
-        }
-        else if (row0*this->dim+M.COL[count0] == row1*this->dim + COL[count1]) {
-            count0++;
-            count1++;
-        }
-        else {
-            count1++;
-        }
-        nnz++;
-        if (count0 == M.ROW[row0+1]) row0++;
-        if (count1 == ROW[row1+1]) row1++;
-        if(row1==row0 && ROW_new[row0]==0)
-            ROW_new[row0] = nnz;
-    }
-
-    Sparse output(nrow, this->dim, ROW_new[nrow]);
-    for (num_type i=0; i<row0+1; i++) {
-        output.mod_ROW_at(i, ROW_new[i]);
-    }
-    free(ROW_new);
-
-    // fill VAL and COL
-    num_type r0=0, r1=0, c0=0, c1=0;
-    num_type len=0;
-    while(r0 < nrow || r1<nrow) {
-        // smaller column index is first copied, if same index add together
-        num_type column;
-        std::complex<double> value;
-        if (r0*this->dim + M.COL[c0] < r1*this->dim + COL[c1]) {
-            column = -M.get_COL(c0);
-            value = -M.val_at(c0);
-            c0++;
-        }
-        else if (r0*this->dim+M.COL[c0] == r1*this->dim + COL[c1]) {
-            column = COL[c1];
-            value = -M.val_at(c0)+VAL[c1];
-            c0++;
-            c1++;
-        }
-        else {
-            column = COL[c1];
-            value = VAL[c1];
-            c1++;
-        }
-        output.mod_COL_at(len, column);
-        output.mod_VAL_at(len, value);
-        len++;
-        if (c0 == M.ROW[r0+1]) r0++;
-        if (c1 == ROW[r1+1]) r1++;
-    }
-    return output;
-}
-
-
-template<typename num_type>
-Sparse<num_type> Sparse<num_type>::operator*(std::complex<double> a) const {
-    Sparse output(*this);
-    for (int i=0; i<get_nnz(); i++) {
-        output.mod_VAL_at(i, VAL[i] * a);
-    }
-    return output;
-}
-*/
 
 template<typename num_type, typename coarse_num_type>
 HierarchicalSparse<num_type, coarse_num_type>::~HierarchicalSparse() {
+    for (num_type i=0; i<ROW[nrow]; i++) {
+        delete VAL[i];
+    }
+    delete[] VAL;
     delete ROW;
     delete COL;
-    delete[] VAL;
 }
 
 #endif //MGPRECONDITIONEDGCR_HIERARCHICALSPARSE_H

@@ -6,6 +6,9 @@
 #define MGPRECONDITIONEDGCR_GCR_H
 
 #include <complex>
+#include <iostream>
+#include <fstream>
+#include <string>
 #include "utils.h"
 #include "Operator.h"
 #include "SolverParam.h"
@@ -17,6 +20,7 @@ class GCR: public Operator<num_type> {
 public:
     // load LSE that needs to be solved
     GCR()= default;
+    GCR(GCR const & gcr)= delete;
     GCR(const std::complex<double> *matrix, const num_type dimension);
     explicit GCR(Operator<num_type> *M, GCR_Param<num_type>* gcr_param) : A_operator(M) {param = gcr_param; this->dim = A_operator->get_dim();};
 
@@ -35,7 +39,7 @@ public:
     Field<num_type> operator()(Field<num_type> const &f) override; // matrix vector multiplication
 
 
-    ~GCR();
+    ~GCR() override;
 private:
     std::complex<double> *A = nullptr;
     Operator<num_type>* A_operator = nullptr;
@@ -45,7 +49,7 @@ private:
 
 template<typename num_type>
 Field<num_type> GCR<num_type>::operator()(const Field<num_type> &f) {
-    Field<num_type> x(f.get_dim(), f.get_ndim());
+    Field<num_type> x(f.get_mesh());
     solve(f, x);
     return x;
 }
@@ -86,7 +90,8 @@ void GCR<num_type>::solve(const std::complex<double> *rhs, std::complex<double>*
     auto *ps = (std::complex<double> *) malloc(this->dim * sizeof(std::complex<double>) * truncation);
     vec_copy(p, ps, this->dim);
 
-    do {
+    while (vec_squarednorm(r, this->dim).real() > tol && iter_count<max_iter)
+    {
         iter_count++;
 
         // factors alpha and beta (local to each loop)
@@ -123,7 +128,7 @@ void GCR<num_type>::solve(const std::complex<double> *rhs, std::complex<double>*
 
         printf("Step %d residual norm = %.10e\n", iter_count, std::sqrt(vec_squarednorm(r, this->dim).real()));
 
-    } while (vec_squarednorm(r, this->dim).real() > tol && iter_count<max_iter);
+    }
 
     if (iter_count==max_iter)
         printf("GCR did not converge after %d steps! Residual norm = %.10e\n", max_iter, vec_squarednorm(r, this->dim).real());
@@ -147,20 +152,32 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
     assertm(param->truncation==0 || param->restart==0, "Do not support concurrent restarting and truncation.");
 
 
+    std::ofstream file("../../data/out_data/convergence.txt");
+
     // loading parameters
     int truncation, restart;
     int storage_size = param->max_iter;
-    if(param->truncation!=0) {truncation = param->truncation; storage_size = truncation;}
-    else truncation = param->max_iter;
-    if (param->restart!=0) {restart = param->restart; storage_size = restart;}
-    else restart = param->max_iter;
+    if(param->truncation!=0) {
+        truncation = param->truncation;
+        storage_size = truncation;
+    }
+    else
+        truncation = param->max_iter;
+
+    if (param->restart!=0) {
+        restart = param->restart;
+        storage_size = restart;
+    }
+    else
+        restart = param->max_iter;
+
 
     //initialise 4 intermediate vectors
-    Field Ax = (*A_operator)(x);
-    Field r = rhs - Ax;
+    Field r(rhs);
     Field p(r); // p = r
     Field Ap = (*A_operator)(p);
     Field Ar(Ap);
+
 
     // compute and apply preconditioning if specified
     if(param->right_precond != nullptr) {
@@ -174,10 +191,16 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
 
 
     // Aps and ps are truncated directions
-    auto *Aps = (Field<num_type> *) calloc(storage_size, sizeof(Field<num_type>));
-    auto *ps = (Field<num_type> *) calloc(storage_size, sizeof(Field<num_type>));
+    auto *Aps = new Field<num_type>[storage_size];
+    auto *ps = new Field<num_type>[storage_size];
     Aps[0] = Ap;
     ps[0] = p;
+
+    if (param->verbose) {
+        printf("Step %d residual norm = %.10e\n", 0, std::sqrt(r.squarednorm()) / rhs.norm());
+        file << 0 << "\t" << r.norm()/rhs.norm() << "\n";
+    }
+
 
     // main loop
     int iter_count = 0;
@@ -209,9 +232,9 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
 
         // beta corrections loop
         int const lim = std::min(storage_size, iter_count);
-        // log correction
-        Field Ap_corr(Ap.get_dim(), Ap.get_ndim());
-        Field p_corr(p.get_dim(), p.get_ndim());
+
+        Field Ap_corr(Ap.get_mesh());
+        Field p_corr(p.get_mesh());
         Ap_corr.set_zero();
         p_corr.set_zero();
         for (int i = 0; i < lim; i++) {
@@ -226,10 +249,12 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
         Ap = Ar + Ap_corr;
 
 
-        if (param->verbose  && global_count%10==0)
-        //if (param->verbose)
-            printf("Step %d residual norm = %.10e\n", global_count, std::sqrt(r.squarednorm()));
-
+        //if (param->verbose  && global_count%10==0)
+        if (param->verbose) {
+            printf("Step %d residual norm = %.10e\n", global_count,
+                   std::sqrt(r.squarednorm()) / rhs.norm());
+            file << global_count << "\t" << r.norm()/rhs.norm() << "\n";
+        }
 
         // if restart GCR from iter_count=0, wipe all stored directions
         if(iter_count%restart == 0) {
@@ -243,19 +268,20 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
         // replace one vector in Aps and ps
         Aps[iter_count % storage_size] = Ap;
         ps[iter_count % storage_size] = p;
-    } while ((r.squarednorm() > (param->tol)*(param->tol)) && global_count<(param->max_iter));
+    } while (((r.squarednorm()/rhs.squarednorm()) > (param->tol)*(param->tol)) && global_count<(param->max_iter));
 
-    free(Aps);
-    free(ps);
+    delete []Aps;
+    delete []ps;
 
     if (param->verbose) {
         if (global_count == param->max_iter)
             printf("GCR did not converge after %d steps! Residual norm = %.10e\n", param->max_iter,
-                   std::sqrt(r.squarednorm()));
+                   std::sqrt(r.squarednorm())/rhs.norm());
         else
-            printf("GCR converged after %d steps. Residual norm=%.10e\n", global_count, std::sqrt(r.squarednorm()));
+            printf("GCR converged after %d steps. Residual norm=%.10e\n", global_count, std::sqrt(r.squarednorm())/rhs.norm());
 
     }
+    file.close();
 }
 
 

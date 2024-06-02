@@ -18,8 +18,11 @@ void probe_order();
 void test_dirac();
 void test_kcritical();
 void test_MG();
+void test_MG_property();
 void test_MG_precompute();
 void k_critical_mg_precond();
+void solve_leak();
+void test_gamma5();
 
 
 
@@ -43,10 +46,13 @@ int main() {
     /* 4. Testing MG*/
     //test_MG();
     //test_MG_precompute();
-    k_critical_mg_precond();
+    // k_critical_mg_precond();
+    //test_MG_property();
 
 
-
+    /* 5. debug */
+    //solve_leak();
+    test_gamma5();
     return 0;
 }
 
@@ -531,9 +537,10 @@ void test_data() {
     gcr.solve(rhs, x);
     delete mat;
 }
-
+*/
 void test_hermiticity() {
     auto mat = new Sparse(read_data("4x4parsed.txt"));
+    //auto Dirac = new Sparse()
 
     long dims[1] = {(*mat).get_dim()};
     Field<long> v(dims, 1), w(dims, 1);
@@ -572,7 +579,7 @@ void probe_order() {
     Mesh dofh(mesh_dim, 6);
 
     printf("\nProbe with field(0, 0, 0, 0, 0, 0) = 1:\n");
-    probe.mod_val_at((long)12 * 4 * 4 * 4, 1.);
+    probe.mod_val_at((long)0, 1.);
     Field result = (*D)(probe);
     int count =0;
     for (int i=0; i<3072; i++) {
@@ -594,10 +601,82 @@ void probe_order() {
         }
     }
 
+
+    // to tell apart x and y, I will apply eigenvectors vectors of gamma_1 to the dirac,
+    // I expect the x direction to be diagonal
+    Field<long> probe1(dims, 1);
+    probe1.set_zero();
+    // apply S (eigenbasis transform) to vector (1, 0, 0, ....)
+    // i.e. spinor index 0: -i
+    probe1.mod_val_at((long)0, std::complex<double>(0,-1));
+    probe1.mod_val_at((long)1, std::complex<double>(0,-1));
+    probe1.mod_val_at((long)2, std::complex<double>(0,-1));
+    // spinor index 2: 1
+    probe1.mod_val_at(9, 1);
+    probe1.mod_val_at(10, 1);
+    probe1.mod_val_at(11, 1);
+
+    // apply dirac
+    Field r = (*D)(probe1);
+    Field<long> k(dims, 1);
+    k.set_zero();
+    // apply S+
+    for (int i=0; i<3072; i++) {
+        long *index = dofh.alloc_loc_ind(i);
+        if (index[5]==0) {
+            switch (index[4]) {
+                case 0:
+                    k.mod_val_at(i, k.val_at(i) + std::complex<double>(0, 1) * r.val_at(i));
+                    k.mod_val_at(i + 1, k.val_at(i+1) + std::complex<double>(0, 1) * r.val_at(i + 1));
+                    k.mod_val_at(i + 2, k.val_at(i+2) + std::complex<double>(0, 1) * r.val_at(i + 2));
+                    k.mod_val_at(i + 6, k.val_at(i+6) - std::complex<double>(0, 1) * r.val_at(i));
+                    k.mod_val_at(i + 7, k.val_at(i+7) - std::complex<double>(0, 1) * r.val_at(i + 1));
+                    k.mod_val_at(i + 8, k.val_at(i+8) - std::complex<double>(0, 1) * r.val_at(i + 2));
+                    break;
+                case 1:
+                    k.mod_val_at(i, k.val_at(i) + std::complex<double>(0, 1) * r.val_at(i));
+                    k.mod_val_at(i + 1, k.val_at(i+1) + std::complex<double>(0, 1) * r.val_at(i + 1));
+                    k.mod_val_at(i + 2, k.val_at(i+2) + std::complex<double>(0, 1) * r.val_at(i + 2));
+                    k.mod_val_at(i + 6, k.val_at(i+6) - std::complex<double>(0, 1) * r.val_at(i));
+                    k.mod_val_at(i + 7, k.val_at(i+7) - std::complex<double>(0, 1) * r.val_at(i + 1));
+                    k.mod_val_at(i + 8, k.val_at(i+8) - std::complex<double>(0, 1) * r.val_at(i + 2));
+                    break;
+                case 2:
+                    k.mod_val_at(i - 3, k.val_at(i-3) + r.val_at(i));
+                    k.mod_val_at(i - 2, k.val_at(i-2) + r.val_at(i + 1));
+                    k.mod_val_at(i - 1, k.val_at(i-1) + r.val_at(i + 2));
+                    k.mod_val_at(i + 3, k.val_at(i+3) + r.val_at(i));
+                    k.mod_val_at(i + 4, k.val_at(i+4) + r.val_at(i + 1));
+                    k.mod_val_at(i + 5, k.val_at(i+5) + r.val_at(i + 2));
+                    break;
+                case 3:
+                    k.mod_val_at(i - 9, k.val_at(i-9) + r.val_at(i));
+                    k.mod_val_at(i - 8, k.val_at(i-8) + r.val_at(i + 1));
+                    k.mod_val_at(i - 7, k.val_at(i-7) + r.val_at(i + 2));
+                    k.mod_val_at(i - 3, k.val_at(i-3) + r.val_at(i));
+                    k.mod_val_at(i - 2, k.val_at(i-2) + r.val_at(i + 1));
+                    k.mod_val_at(i - 1, k.val_at(i-1) + r.val_at(i + 2));
+                    break;
+            }
+        }
+        delete[] index;
+    }
+
+    // expect only non-zero in spinor index 1 for direction x
+    printf("\n\n non-zero after eigenbasis transform:\n");
+    for (int i=0; i<3072; i++) {
+        if (norm(k.val_at(i)) > 1e-13) {
+            long *index = dofh.alloc_loc_ind(i);
+            //if (index[5] == 0)
+                printf("(%d, %d, %d, %d, %d)\t", index[0], index[1], index[2], index[3], index[4]);
+            delete[] index;
+        }
+    }
+
     delete D;
 }
 
-
+/*
 void test_dirac(){
     auto D = new Sparse(read_data("4x4parsed.txt"));
     auto Dirac = new DiracOp(*D, 0.5);
@@ -674,6 +753,7 @@ void test_MG(){
     Field<long> rhs(dims, 6);
     rhs.init_rand();
 
+
     // gcr reference
     Field<long> x_(dims, 6);
     x_.init_rand();
@@ -682,9 +762,9 @@ void test_MG(){
     GCR<long> gcr(Dirac, &gcr_param);
     //gcr.solve(rhs, x_);
 
-    GCR_Param<long> eigen(0, 10, 1, 1e-8, false, nullptr, nullptr, nullptr, nullptr);
-    GCR_Param<long> coarse(0, 10, 100, 1e-8, false, nullptr, nullptr, nullptr, nullptr);
-    GCR_Param<long> smooth(0, 10, 2, 1e-8, false, nullptr, nullptr, nullptr, nullptr);
+    auto eigen = new GCR_Param<long>(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    auto coarse = new GCR_Param<long>(0, 10, 100, 1e-8, false, nullptr, nullptr);
+    auto smooth = new GCR_Param<long>(0, 10, 2, 1e-8, false,nullptr, nullptr);
 
     auto solver_c = new GCR<long>();
     auto solver_s = new GCR<long>();
@@ -700,7 +780,7 @@ void test_MG(){
     delete D;
     delete Dirac;
 }
-*/
+
 
 
 void test_MG_precompute() {
@@ -749,6 +829,7 @@ void test_MG_precompute() {
     delete D;
     delete Dirac;
 }
+*/
 
 void k_critical_mg_precond() {
     long dims[6] = {8, 8, 8, 8, 4, 3};
@@ -756,37 +837,163 @@ void k_critical_mg_precond() {
     auto D = new Sparse(read_data("8x8parsed.txt"));
 
 
-    auto eigen = new GCR_Param<long>(0, 10, 1, 1e-8, false, nullptr, nullptr);
-    auto coarse = new GCR_Param<long>(0, 10, 1, 1e-8, false, nullptr, nullptr);
-    auto smooth = new GCR_Param<long>(0, 10, 1, 1e-8, false,nullptr, nullptr);
-    auto solver_coarse = new GCR(coarse);
-    auto solver_smooth = new GCR(smooth);
+    GCR_Param<long> eigen(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    GCR_Param<long> smooth(0, 10, 0, 1e-8, false,nullptr, nullptr);
 
-    auto param = new MG_Param<long>(mesh, 4, 2, eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
 
     double const st = (0.17865- 0.05)/20.;
-    for (int exp=0; exp<21; exp++) {
+    for (int exp=0; exp<1; exp++) {
         double const k = 0.05 + exp * st;
         printf("k number %d\n", exp);
-        auto Dirac = new DiracOp<long>(*D, k);
+        auto Dirac = new DiracOp<long>(D, k);
 
         Field<long> rhs(dims, 6);
         rhs.init_rand(42);
 
-        auto mg = new MG(param);
 
-        auto gcr_param_new = new GCR_Param<long>(0, 10, 2000, 1e-13, true, nullptr, mg);
-        //auto gcr_param_new = new GCR_Param<long>(0, 10, 4000, 1e-13, true, nullptr, nullptr);
 
-        GCR gcr_precond(Dirac, gcr_param_new);
+        auto solver_coarse = new GCR(&coarse);
+        auto solver_smooth = new GCR(&smooth);
+        MG_Param<long> param(mesh, 4, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+        MG mg(Dirac, &param);
+
+
+        GCR_Param<long> gcr_param_new(0, 5, 2000, 1e-13, true, nullptr, &mg);
+        //GCR_Param<long> gcr_param_new(0, 10, 4000, 1e-13, true, nullptr, nullptr);
+
+        GCR gcr_precond(Dirac, &gcr_param_new);
         Field x = gcr_precond(rhs);
 
+
         delete Dirac;
-        delete gcr_param_new;
+        delete solver_coarse;
+        delete solver_smooth;
+        //delete mg;
     }
 
+    delete D;
+    //delete Dirac;
+}
+
+void test_MG_property() {
+    long dims[6] = {8, 8, 8, 8, 4, 3};
+    Mesh mesh(dims, 6);
+    auto D = new Sparse(read_data("8x8parsed.txt"));
+    auto Dirac = new DiracOp(D, 0.1);
+
+    GCR_Param<long> eigen(0, 10, 10, 1e-8, false, nullptr, nullptr);
+    GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    GCR_Param<long> smooth(0, 10, 1, 1e-8, false,nullptr, nullptr);
+    auto solver_coarse = new GCR(&coarse);
+    auto solver_smooth = new GCR(&smooth);
+    MG_Param<long> param(mesh, 4, 1, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+    auto mg = new MG(Dirac, &param);
+
+    //mg->test_MG(Dirac);
+    //mg->test_by_value(Dirac);
+
+
+    Field<long> rhs(dims, 6);
+    rhs.init_rand(42);
+
+    Field inter1 = mg->restrict(rhs);
+    Field inter2 = mg->expand(inter1);
+//    Field inter3 = mg->restrict(inter2);
+/*
+
+    Field inter11 = mg->restrict(inter2);
+    Field inter22 = mg->expand(inter11);
+*/
+    //printf("Difference = %.5e\n", (inter2 - inter22).norm());
+    //printf("Difference = %.5e\n", (inter3 - inter1).norm());
+    printf("%.5e\t%.5e", inter1.norm(), inter2.norm());
+
+
+    delete mg;
     delete solver_coarse;
     delete solver_smooth;
-    delete param;
+    delete Dirac;
     delete D;
+}
+
+
+void solve_leak() {
+    // test arnoldi
+    long dims[6] = {8, 8, 8, 8, 4, 3};
+    Mesh mesh(dims, 6);
+    auto D = new Sparse(read_data("8x8parsed.txt"));
+    auto Dirac = new DiracOp(D, 0.17);
+
+    do {
+        GCR_Param<long> eigen(0, 100, 2, 1e-8, false, nullptr, nullptr);
+        GCR gcr(Dirac, &eigen);
+        //Mesh mesh1(dims, 6);
+        Field<long> rhs(dims, 6);
+        rhs.init_rand();
+        Field<long> x(dims, 6);
+        x=rhs;
+        x.normalise();
+        Field t = x * x.dot(rhs);
+        gcr.solve(rhs, x);
+
+        auto eigenvecs = new Field<long>[5];
+        Arnoldi eigensolve(&eigen, 5);
+        eigensolve.solve(Dirac, eigenvecs);
+        delete []eigenvecs;
+
+        GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
+        GCR_Param<long> smooth(0, 10, 0, 1e-8, false,nullptr, nullptr);
+        auto solver_coarse = new GCR(&coarse);
+        auto solver_smooth = new GCR(&smooth);
+        MG_Param<long> param(mesh, 8, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+        MG mg(Dirac, &param);
+        mg.solve(rhs, x);
+
+        delete solver_coarse;
+        delete solver_smooth;
+
+    } while(true);
+
+    delete Dirac;
+    delete D;
+}
+
+void test_gamma5() {
+
+    long dims[6] = {8, 8, 8, 8, 4, 3};
+    Mesh mesh(dims, 6);
+    auto D = new Sparse(read_data("8x8parsed.txt"));
+    auto Dirac = new DiracOp(D, 0.17);
+    Field<long> r(dims, 6);
+    r.init_rand();
+    r.normalise();
+    Field<long> l(dims,6);
+    l.init_rand(21);
+    l.normalise();
+
+
+    //Field f1 = (*Dirac)(r.gamma5(4));
+    //f1 = f1.gamma5(4);
+
+    //Field f2 = (*Dirac)(l.gamma5(4));
+    //f2 = f2.gamma5(4);
+
+    //printf("Difference = (%.5e, %.5e)", (f1.dot(l) - r.dot(f2)).real(), (f1.dot(l) - r.dot(f2)).imag());
+
+    for (int i=0; i<49152; i++) {
+        r.mod_val_at(i, i);
+    }
+
+    Field resu = r.gamma5(4);
+
+    for (int i=0; i<49152; i++) {
+        printf("%f\n", resu.val_at(i));
+    }
+
+
+
+    delete Dirac;
+    delete D;
+
 }

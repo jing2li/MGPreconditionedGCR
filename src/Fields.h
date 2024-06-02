@@ -9,9 +9,11 @@
 #include <cassert>
 #include <complex>
 #include "Mesh.h"
+#include <stdexcept>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
+/* Point class not in use! */
 template <typename num_type>
 class Point {
 private:
@@ -29,6 +31,7 @@ class Field {
 public:
     Field() = default;
     Field(Field const &f);
+    Field (Mesh<num_type> m);
     Field(const num_type* dimensions, num_type ndim); // uninitialised field
     Field(const num_type *dimensions, num_type ndim, std::complex<double> *field_init); // field with initialisation
     void init_rand(int seed = 1); // random initialisation of field to value [-1, 1]
@@ -36,7 +39,7 @@ public:
     void set_constant(std::complex<double> c);
 
     // Query Field information
-    [[nodiscard]] num_type* get_dim() const; // get dimensions
+    [[nodiscard]] num_type* alloc_get_dim(); // get dimensions
     [[nodiscard]] num_type get_ndim() const; // get number of dimensions;
     [[nodiscard]] num_type field_size() const; // get length of u_field
     Mesh<num_type> get_mesh() const; //
@@ -58,68 +61,29 @@ public:
     Field &operator-=(const Field& f);
     void normalise();
     Field gamma5(int spinor_index) const; // left multiply with gamma5
-    void dagger();
+
 
 
 
     ~Field();
 
 protected:
-    num_type *dim = {nullptr};
-    num_type nindex = 0;
     Mesh<num_type> mesh;
-    std::complex<double> *field{};
+    std::complex<double> *field = nullptr;
 };
-
-
-template <typename num_type>
-class Boson : public Field<num_type> {
-public:
-    // initialise boson field memory layout, slowest to fastest
-    explicit Boson (num_type const *index_dim);
-
-protected:
-    using Field<num_type>::dim;
-    using Field<num_type>::nindex;
-    using Field<num_type>::mesh;
-    using Field<num_type>::field;
-};
-
-template <typename num_type>
-class Fermion : public Field<num_type>{
-public:
-    explicit Fermion(num_type const *index_dim);
-
-protected:
-    using Field<num_type>::dim;
-    using Field<num_type>::nindex;
-    using Field<num_type>::mesh;
-    using Field<num_type>::field;
-};
-
 
 
 
 
 template <typename num_type>
 Field<num_type>::Field(const num_type *dimensions, num_type ndim) {
-    dim = (num_type *) malloc(ndim * sizeof(num_type));
-    for (num_type i=0; i<ndim; i++){
-        dim[i] = dimensions[i];
-    }
-    nindex = ndim;
-    mesh = Mesh(dim, nindex);
+    mesh = Mesh(dimensions, ndim);
     field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
 }
 
 template <typename num_type>
 Field<num_type>::Field(const num_type *dimensions, num_type ndim, std::complex<double> *field_init) {
-    dim = (num_type *) malloc(ndim * sizeof(num_type));
-    for (num_type i=0; i<ndim; i++){
-        dim[i] = dimensions[i];
-    }
-    nindex = ndim;
-    mesh = Mesh(dim, nindex);
+    mesh = Mesh(dimensions, ndim);
     field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
     for (num_type i=0; i<mesh.get_size(); i++) {
         field[i] = field_init[i];
@@ -128,12 +92,7 @@ Field<num_type>::Field(const num_type *dimensions, num_type ndim, std::complex<d
 
 template <typename num_type>
 Field<num_type>::Field(Field const &f) {
-    nindex= f.get_ndim();
-    dim = (num_type *) malloc(nindex *sizeof(num_type));
-    for(num_type i=0; i<nindex; i++) {
-        dim[i] = f.get_dim()[i];
-    }
-    mesh = Mesh(dim, nindex);
+    mesh = Mesh(f.mesh);
     field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
     for(num_type i=0; i<mesh.get_size(); i++) {
         field[i] = f.val_at(i);
@@ -141,17 +100,23 @@ Field<num_type>::Field(Field const &f) {
 }
 
 template <typename num_type>
-num_type *Field<num_type>::get_dim() const{
-    num_type *out = (num_type *)malloc(sizeof(num_type) * nindex);
-    for (num_type i=0; i<nindex; i++) {
-        out[i] = dim[i];
+Field<num_type>::Field(Mesh<num_type> m) {
+    mesh = Mesh(m);
+    field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
+}
+
+template <typename num_type>
+num_type *Field<num_type>::alloc_get_dim(){
+    auto *out = (num_type *)malloc(sizeof(num_type) * mesh.get_ndim());
+    for (num_type i=0; i<mesh.get_ndim(); i++) {
+        out[i] = mesh.get_dims()[i];
     }
     return out;
 }
 
 template <typename num_type>
 num_type Field<num_type>::get_ndim() const {
-    return nindex;
+    return mesh.get_ndim();
 }
 
 template <typename num_type>
@@ -164,15 +129,19 @@ void Field<num_type>::init_rand(int seed) {
     // random initialisation of u_field to a value [-1, 1]
     num_type size = mesh.get_size();
     srand(seed);
-    field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
+    if (field== nullptr)
+        field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * size);
     for (num_type i=0; i<size; i++) {
-        field[i] = rand() % 2000/1000. - 1;
+        field[i] = std::complex<double>((rand() % 2000)/1000. - 1, (rand() % 2000)/1000. - 1);
     }
 }
 
 template <typename num_type>
 void Field<num_type>::set_zero() {
-    for (num_type i=0; i<mesh.get_size(); i++) {
+    if (field == nullptr) {
+        field = (std::complex<double> *)malloc(sizeof(std::complex<double>) * field_size());
+    }
+    for (num_type i = 0; i < field_size(); i++) {
         field[i] = 0.;
     }
 }
@@ -184,11 +153,11 @@ void Field<num_type>::set_constant(std::complex<double> c) {
 }
 template <typename num_type>
 std::complex<double> Field<num_type>::val_at(const num_type *index) const{
-    for (num_type i=0; i<nindex; i++) {
-        assertm(index[i] < dim[i], "Field memory access out of bound!");
+    for (num_type i=0; i<mesh.ndim; i++) {
+        assertm(index[i] < mesh.dim[i], "Field memory access out of bound!");
     }
 
-    const num_type ind = Mesh<num_type>::ind_loc(index, dim, nindex);
+    const num_type ind = Mesh<num_type>::ind_loc(index, mesh.dim, mesh.ndim);
 
     return field[ind];
 }
@@ -202,7 +171,7 @@ std::complex<double> Field<num_type>::val_at(const num_type location) const {
 
 template <typename num_type>
 void Field<num_type>::mod_val_at(const num_type *index, std::complex<double> const new_value) {
-    const num_type ind = Mesh<num_type>::ind_loc(index, dim, nindex);
+    const num_type ind = mesh.ind_loc(index);
     field[ind] = new_value;
 }
 
@@ -218,19 +187,15 @@ Mesh<num_type> Field<num_type>::get_mesh() const {
 
 template <typename num_type>
 Field<num_type>::~Field() {
-    if (field != nullptr)
-        free(field);
+//    if (field != nullptr)
+//        free(field);
 }
 
 template <typename num_type>
 Field<num_type> Field<num_type>::operator+(const Field& f) const {
     assertm(field_size() == f.field_size(), "Lengths of two fields do not match!");
-    num_type* f_dim = f.get_dim();
-    for (num_type i=0; i<nindex; i++) {
-        assertm(dim[i] == f_dim[i], "Dimension arrangement of two fields do not match!");
-    }
 
-    Field output(dim, nindex);
+    Field output(mesh);
     for (num_type i=0; i<field_size(); i++) {
         output.mod_val_at(i, field[i] + f.val_at(i));
     }
@@ -241,12 +206,8 @@ Field<num_type> Field<num_type>::operator+(const Field& f) const {
 template <typename num_type>
 Field<num_type> Field<num_type>::operator-(const Field& f) const {
     assertm(this->field_size() == f.field_size(), "Lengths of two fields do not match!");
-    num_type* f_dim = f.get_dim();
-    for (num_type i=0; i<nindex; i++) {
-        assertm(dim[i] == f_dim[i], "Dimension arrangement of two fields do not match!");
-    }
 
-    Field output(dim, nindex);
+    Field output(mesh);
     for (num_type i=0; i<field_size(); i++) {
         output.mod_val_at(i, field[i] - f.val_at(i));
     }
@@ -257,9 +218,6 @@ Field<num_type> Field<num_type>::operator-(const Field& f) const {
 template <typename num_type>
 std::complex<double> Field<num_type>::dot(const Field& f) const {
     assertm(this->field_size() == f.field_size(), "Lengths of two fields do not match!");
-    //num_type* f_dim = f.get_dim();
-    
-    //assertm(daggered == true, "Require first field to be daggered!");
 
     std::complex<double> output(0., 0.);
     for (num_type i=0; i<field_size(); i++) {
@@ -288,7 +246,7 @@ void Field<num_type>::normalise() {
 
 template <typename num_type>
 Field<num_type> Field<num_type>::operator*(std::complex<double> a) const{
-    Field output(dim, nindex);
+    Field output(mesh);
     for (num_type i=0; i<field_size(); i++) {
         output.mod_val_at(i, a * field[i]);
     }
@@ -296,15 +254,20 @@ Field<num_type> Field<num_type>::operator*(std::complex<double> a) const{
     return output;
 }
 
-template<typename num_type>
-void Field<num_type>::dagger() {
-    //daggered = true;
-}
 
 template <typename num_type>
 Field<num_type> &Field<num_type>::operator=(const Field& f) noexcept{
-    // case 1: overwrite existing field
-    if (field_size() == f.field_size()) {
+    // case 1:do initialisation if lhs uninitialised
+    if (field== nullptr) {
+        mesh = Mesh(f.mesh);
+        field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
+        for (num_type i=0; i<mesh.get_size(); i++) {
+            field[i] = f.field[i];
+        }
+        return *this;
+    }
+    //case 2: overwrite existing field
+    else if (field_size() == f.field_size()) {
         // self-assignment
         if (this == &f) {
             return *this;
@@ -315,21 +278,10 @@ Field<num_type> &Field<num_type>::operator=(const Field& f) noexcept{
         }
         return *this;
     }
-
-        // case 2: do initialisation if lhs uninitialised
     else {
-        dim = (num_type *) malloc(f.nindex * sizeof(num_type));
-        for (num_type i=0; i<f.nindex; i++){
-            dim[i] = f.dim[i];
-        }
-        nindex = f.nindex;
-        mesh = Mesh(dim, nindex);
-        field = (std::complex<double> *) malloc(sizeof(std::complex<double>) * mesh.get_size());
-        for (num_type i=0; i<mesh.get_size(); i++) {
-            field[i] = f.field[i];
-        }
-        return *this;
+        throw std::invalid_argument("Dimension mismatch.");
     }
+
 }
 
 template<typename num_type>
@@ -354,28 +306,15 @@ Field<num_type> &Field<num_type>::operator-=(const Field &f) {
     return *this;
 }
 
-template <typename num_type>
-Boson<num_type>::Boson(num_type const* index_dim) {
-    // copy to dim
-    for (num_type i=0; i<nindex; i++) {
-        dim[i] = index_dim[i];
-    }
-    nindex = 7;
-
-    // initialise mesh
-    mesh = Mesh(index_dim, nindex);
-}
-
 template<typename num_type>
 Field<num_type> Field<num_type>::gamma5(int spinor_index) const {
-    Field output(*this);
+    Field output(mesh);
+    output.set_zero();
 
     for (num_type i = 0; i < mesh.get_size(); ++i) {
-        // convvert location to index
-        num_type index[nindex];
-        for (int j=0; j<nindex; j++) {
-            index[j] = mesh.loc_ind(i)[j];
-        }
+        // convert location to index
+        num_type* index = mesh.alloc_loc_ind(i);
+
         switch(index[spinor_index])
         {
             case 0:
@@ -393,20 +332,9 @@ Field<num_type> Field<num_type>::gamma5(int spinor_index) const {
         }
 
         output.mod_val_at(index, field[i]);
+        delete[] index;
     }
     return output;
-}
-
-template <typename num_type>
-Fermion<num_type>::Fermion(const num_type *index_dim) {
-    //copy to dim
-    for (num_type i=0; i<6; i++) {
-        dim[i] = index_dim[i];
-    }
-    nindex = 6;
-
-    // initialise mesh
-    mesh = Mesh(index_dim, 6);
 }
 
 #endif //MGPRECONDITIONEDGCR_FIELDS_H

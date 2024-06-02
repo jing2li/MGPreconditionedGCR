@@ -14,6 +14,7 @@ template <typename num_type>
 class Mesh {
 public:
     Mesh()= default;
+    Mesh(Mesh const &m);
     Mesh(num_type const *index_dims, int num_dims);
 
     /* index to memory location mapping given dimensions of each direction */
@@ -53,21 +54,52 @@ public:
 
 private:
     int ndim = 0; // number of dimensions
-    num_type *dim = NULL; // a vector of dimension in each direction
+    num_type *dim = nullptr; // a vector of dimension in each direction
     num_type size = 0; // number of complex values
     num_type sub_dim = 0;
     int blocked_ind[4];
     int block_dim[4] = {0}; // number of blocks in spacetime direction
-    num_type** block_map = NULL; // map from local index to spacetime index
+    num_type** block_map = nullptr; // map from local index to spacetime index
 };
+
+template <typename num_type>
+Mesh<num_type>::Mesh(Mesh const &m) {
+    // copy info
+    ndim = m.ndim;
+    dim = (num_type *) malloc(sizeof(num_type) * ndim);
+    size=1;
+    for (int i=0; i<ndim; i++) {
+        dim[i] = m.dim[i];
+        size *= m.dim[i];
+    }
+    if (m.sub_dim !=0) {
+        sub_dim = m.sub_dim;
+        for (int i=0; i<4; i++) {
+            blocked_ind[i] = m.blocked_ind[i];
+            block_dim[i] = m.block_dim[i];
+        }
+
+        num_type nblocks = get_nblocks();
+        block_map = new num_type * [nblocks];
+        for (num_type i=0; i<nblocks; i++) {
+            block_map[i] = new num_type [get_block_size()];
+        }
+        for (num_type i=0; i<nblocks; i++) {
+            for (num_type j=0; j<get_block_size(); j++) {
+                block_map[i][j] =m.block_map[i][j];
+            }
+        }
+    }
+
+}
 
 template <typename num_type>
 Mesh<num_type>::Mesh(const num_type *index_dims, int const num_dims) {
     // copy info
     ndim = num_dims;
-    dim = (num_type *)malloc(sizeof(num_type) * ndim);
+    dim = (num_type *) malloc(sizeof(num_type) * ndim);
     size=1;
-    for (num_type i=0; i<ndim; i++) {
+    for (int i=0; i<ndim; i++) {
         dim[i] = index_dims[i];
         size *= index_dims[i];
     }
@@ -282,7 +314,17 @@ num_type *Mesh<num_type>::alloc_full_index(
 
 template <typename num_type>
 Mesh<num_type>::~Mesh() {
+    if (dim != nullptr) {
+        //printf("dim is %d, %d, %d, %d, %d, %d", dim[0], dim[1], dim[2], dim[3], dim[4], dim[5], dim[6]);
+        //free(dim);
+    }
+    if (block_map!= nullptr) {
+        for (num_type i=0; i<get_nblocks(); i++) {
+            delete []block_map[i];
+        }
+    }
     delete []block_map;
+
 }
 
 template <typename num_type>

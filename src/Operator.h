@@ -22,6 +22,8 @@ public:
     virtual void initialise(Operator * op) {};
     [[nodiscard]] virtual std::complex<double> val_at(num_type location) const=0;
     [[nodiscard]] virtual std::complex<double> val_at(num_type row, num_type col) const=0;
+    virtual ~Operator()= default;
+
 protected:
     num_type dim = 0;
 };
@@ -31,6 +33,7 @@ template <typename num_type>
 class Dense : public Operator<num_type> {
 public:
     Dense()= default;
+    Dense(Dense const &d);
     Dense(std::complex<double> * matrix, num_type const dimension);
 
     [[nodiscard]] std::complex<double> val_at(num_type location) const {return mat[location];};
@@ -47,7 +50,7 @@ public:
     ~Dense();
 
 private:
-    std::complex<double> *mat = NULL;
+    std::complex<double> *mat = nullptr;
 };
 
 template <typename num_type>
@@ -102,18 +105,20 @@ protected:
 template <typename num_type>
 class DiracOp : public Operator<num_type> {
 public:
-    DiracOp(Sparse<num_type> mat, std::complex<double> k_factor);
+    DiracOp(Sparse<num_type>* mat, std::complex<double> k_factor);
+    DiracOp(DiracOp const & op);
 
-    [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override {return 1.-k*D.val_at(row, col);}; // value at (row, col)
-    [[nodiscard]] std::complex<double> val_at(num_type location) const override {return 1.-k*D.val_at(location);}; // value at memory location
+    [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override {return 1.-k*D->val_at(row, col);}; // value at (row, col)
+    [[nodiscard]] std::complex<double> val_at(num_type location) const override {return 1.-k*D->val_at(location);}; // value at memory location
 
     Field<num_type> operator()(Field<num_type> const &f) override; // matrix vector multiplication
 
     void set_k(std::complex<double> new_k) {k = new_k;};
+    ~DiracOp() = default;
 
 private:
     std::complex<double> k = 0.;
-    Sparse<num_type> D;
+    Sparse<num_type> *D;
 };
 
 template <typename num_type>
@@ -121,6 +126,13 @@ Dense<num_type>::Dense(std::complex<double> *matrix, num_type const dimension) {
     mat = (std::complex<double> *)malloc(sizeof(std::complex<double>) * dimension*dimension);
     vec_copy(matrix, mat, dimension*dimension);
     this->dim = dimension;
+}
+
+template <typename num_type>
+Dense<num_type>::Dense(Dense const & op) {
+    mat = (std::complex<double> *)malloc(sizeof(std::complex<double>) * op.dim*op.dim);
+    vec_copy(op.mat, mat, op.dim*op.dim);
+    this->dim = op.dim;
 }
 
 
@@ -148,7 +160,7 @@ template <typename num_type>
 Field<num_type> Dense<num_type>::operator()(const Field<num_type>& f){
     assertm(this->dim == f.field_size(), "Dense and Field sizes do not match!");
 
-    Field output(f.get_dim(), f.get_ndim());
+    Field output(f.get_mesh());
 
     for (num_type row=0; row<this->dim; row++) {
         output.mod_val_at(row, 0);
@@ -318,7 +330,7 @@ void Sparse<num_type>::dagger() {
 template <typename num_type>
 Field<num_type> Sparse<num_type>::operator()(Field<num_type> const &f){
     assertm(this->dim == f.field_size(), "Sparse matrix dimension does not match Field dimension!");
-    Field output(f.get_dim(), f.get_ndim());
+    Field output(f.get_mesh());
 
     // Loop over rows
     for (num_type row=0; row<nrow; row++) {
@@ -332,6 +344,7 @@ Field<num_type> Sparse<num_type>::operator()(Field<num_type> const &f){
 
     return output;
 }
+
 template <typename num_type>
 Sparse<num_type>& Sparse<num_type>::operator=(const Sparse& matrix) noexcept{
     assertm(matrix.VAL != nullptr, "RHS Sparse matrix is null!");
@@ -540,18 +553,24 @@ Sparse<num_type>::~Sparse() {
 
 
 template<typename num_type>
-DiracOp<num_type>::DiracOp(Sparse<num_type> mat, std::complex<double> const k_factor) {
+DiracOp<num_type>::DiracOp(Sparse<num_type>* mat, std::complex<double> const k_factor) {
     k = k_factor;
     D = mat;
-    this->dim = D.get_dim();
+    this->dim = D->get_dim();
 }
 
+template<typename num_type>
+DiracOp<num_type>::DiracOp(DiracOp const & op) {
+    k = op.k;
+    D = op.D;
+    this->dim = D->get_dim();
+}
 
 template<typename num_type>
 Field<num_type> DiracOp<num_type>::operator()(Field<num_type> const &f) {
     assertm( k!= 0., "No k value supplied for Dirac Operator!");
     // output = f - k * D(f)
-    return f - D(f) * k;
+    return f - (*D)(f) * k;
 }
 
 

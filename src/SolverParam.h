@@ -14,7 +14,7 @@ public:
     Operator<num_type> *right_precond = nullptr;
 
     // virtual SolverParam& operator=(const SolverParam &param) noexcept=0;
-    ~SolverParam();
+    //virtual ~SolverParam() = default;
 };
 
 
@@ -56,7 +56,6 @@ public:
              Operator<num_type> *solver_coarse, Operator<num_type> *solver_smooth,
              int levels, Operator<num_type> *solver_l, Operator<num_type> *solver_r);
     MG_Param& operator=(const MG_Param &param) noexcept;
-    ~MG_Param();
 };
 
 
@@ -156,15 +155,6 @@ MG_Param<num_type>::MG_Param(Mesh<num_type> m, num_type sd, int ne, GCR_Param<nu
     n_level = nl;
     this->left_precond = ls;
     this->right_precond = rs;
-}
-
-template<typename num_type>
-MG_Param<num_type>::~MG_Param() {
-}
-
-
-template<typename num_type>
-SolverParam<num_type>::~SolverParam() {
 }
 
 #endif //MGPRECONDITIONEDGCR_SOLVERPARAM_H
