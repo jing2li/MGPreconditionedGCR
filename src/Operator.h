@@ -36,8 +36,8 @@ public:
     Dense(Dense const &d);
     Dense(std::complex<double> * matrix, num_type const dimension);
 
-    [[nodiscard]] std::complex<double> val_at(num_type location) const {return mat[location];};
-    [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const {return mat[row*this->dim + col];};
+    [[nodiscard]] std::complex<double> val_at(num_type location) const override {return mat[location];};
+    [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override {return mat[row*this->dim + col];};
 
 
     // dense matrix linear algebra

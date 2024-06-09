@@ -41,18 +41,18 @@ int main() {
     /* 3. Testing properties of matrix*/
     // test_hermiticity();
     // probe_order();
-    // test_kcritical();
+    //test_kcritical();
 
     /* 4. Testing MG*/
     //test_MG();
     //test_MG_precompute();
-    // k_critical_mg_precond();
-    //test_MG_property();
+    //k_critical_mg_precond();
+    test_MG_property();
 
 
     /* 5. debug */
     //solve_leak();
-    test_gamma5();
+    //test_gamma5();
     return 0;
 }
 
@@ -837,13 +837,13 @@ void k_critical_mg_precond() {
     auto D = new Sparse(read_data("8x8parsed.txt"));
 
 
-    GCR_Param<long> eigen(0, 10, 1, 1e-8, false, nullptr, nullptr);
+    GCR_Param<long> eigen(0, 10, 10, 1e-8, false, nullptr, nullptr);
     GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
-    GCR_Param<long> smooth(0, 10, 0, 1e-8, false,nullptr, nullptr);
+    GCR_Param<long> smooth(0, 10, 0, 1e-8, false, nullptr, nullptr);
 
 
     double const st = (0.17865- 0.05)/20.;
-    for (int exp=0; exp<1; exp++) {
+    for (int exp=15; exp<16; exp++) {
         double const k = 0.05 + exp * st;
         printf("k number %d\n", exp);
         auto Dirac = new DiracOp<long>(D, k);
@@ -856,20 +856,20 @@ void k_critical_mg_precond() {
         auto solver_coarse = new GCR(&coarse);
         auto solver_smooth = new GCR(&smooth);
         MG_Param<long> param(mesh, 4, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
-        MG mg(Dirac, &param);
+        auto mg = new MG(Dirac, &param);
 
 
-        GCR_Param<long> gcr_param_new(0, 5, 2000, 1e-13, true, nullptr, &mg);
+        GCR_Param<long> gcr_param_new(0, 5, 2000, 1e-13, true, nullptr, mg);
         //GCR_Param<long> gcr_param_new(0, 10, 4000, 1e-13, true, nullptr, nullptr);
 
         GCR gcr_precond(Dirac, &gcr_param_new);
         Field x = gcr_precond(rhs);
 
 
+        delete mg;
         delete Dirac;
         delete solver_coarse;
         delete solver_smooth;
-        //delete mg;
     }
 
     delete D;
@@ -884,30 +884,32 @@ void test_MG_property() {
 
     GCR_Param<long> eigen(0, 10, 10, 1e-8, false, nullptr, nullptr);
     GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
-    GCR_Param<long> smooth(0, 10, 1, 1e-8, false,nullptr, nullptr);
+    GCR_Param<long> smooth(0, 10, 1, 1e-8, false, nullptr, nullptr);
     auto solver_coarse = new GCR(&coarse);
     auto solver_smooth = new GCR(&smooth);
-    MG_Param<long> param(mesh, 4, 1, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+    MG_Param<long> param(mesh, 8, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
     auto mg = new MG(Dirac, &param);
 
-    //mg->test_MG(Dirac);
+    mg->test_MG(Dirac);
     //mg->test_by_value(Dirac);
+
 
 
     Field<long> rhs(dims, 6);
     rhs.init_rand(42);
 
+    // RT Rf = Rf   (RT is identity)
     Field inter1 = mg->restrict(rhs);
     Field inter2 = mg->expand(inter1);
-//    Field inter3 = mg->restrict(inter2);
-/*
+    Field inter3 = mg->restrict(inter2);
 
+    // TR TR f = TR f   (TR is a projection)
     Field inter11 = mg->restrict(inter2);
     Field inter22 = mg->expand(inter11);
-*/
-    //printf("Difference = %.5e\n", (inter2 - inter22).norm());
-    //printf("Difference = %.5e\n", (inter3 - inter1).norm());
-    printf("%.5e\t%.5e", inter1.norm(), inter2.norm());
+
+    printf("RT - Id identity test difference = %.5e\n", (inter2 - inter22).norm());
+    printf("TR TR - TR projector test difference = %.5e\n", (inter3 - inter1).norm());
+    //printf("%.5e\t%.5e", inter1.norm(), inter2.norm());
 
 
     delete mg;
@@ -929,24 +931,29 @@ void solve_leak() {
         GCR_Param<long> eigen(0, 100, 2, 1e-8, false, nullptr, nullptr);
         GCR gcr(Dirac, &eigen);
         //Mesh mesh1(dims, 6);
+
         Field<long> rhs(dims, 6);
         rhs.init_rand();
         Field<long> x(dims, 6);
         x=rhs;
         x.normalise();
         Field t = x * x.dot(rhs);
+
         gcr.solve(rhs, x);
 
+
+        /*
         auto eigenvecs = new Field<long>[5];
         Arnoldi eigensolve(&eigen, 5);
-        eigensolve.solve(Dirac, eigenvecs);
+        eigensolve.solve(Dirac, eigenvecs, mesh);
         delete []eigenvecs;
 
+*/
         GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
         GCR_Param<long> smooth(0, 10, 0, 1e-8, false,nullptr, nullptr);
         auto solver_coarse = new GCR(&coarse);
         auto solver_smooth = new GCR(&smooth);
-        MG_Param<long> param(mesh, 8, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+        MG_Param<long> param(mesh, 4, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
         MG mg(Dirac, &param);
         mg.solve(rhs, x);
 

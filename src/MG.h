@@ -23,7 +23,7 @@ public:
     MG()=default;
     MG(MG const &mg) = delete;
     MG(Operator<num_type>* M, MG_Param<num_type>* parameter);
-    MG(MG_Param<num_type>* parameter) : param(parameter) {}; // must use in conjunction with precompute
+    explicit MG(MG_Param<num_type>* parameter) : param(parameter) {}; // must use in conjunction with precompute
 
 
     void recursive_solve(Field<num_type> rhs, Field<num_type> x, const int cur_level);
@@ -69,7 +69,7 @@ public:
         param = gcr_param; n_vec = n_eigenvec;};
 
 
-    void solve(Operator<num_type> *m_init, Field<num_type>* eigenvecs);
+    void solve(Operator<num_type> *m_init, Field<num_type>* eigenvecs, Mesh<num_type> mesh);
 
     ~Arnoldi()=default;
 
@@ -80,28 +80,28 @@ private:
 
 
 template <typename num_type>
-void Arnoldi<num_type>::solve(Operator<num_type> *m, Field<num_type>* eigenvecs) {
+void Arnoldi<num_type>::solve(Operator<num_type> *m, Field<num_type>* eigenvecs, Mesh<num_type> mesh) {
     // inverse power iteration
     GCR<num_type> gcr(m, param);
 
     // a random vector b
-    num_type *dims = eigenvecs[0].alloc_get_dim();
-    Field<num_type> b(dims, 1);
+    Field<num_type> b(mesh);
     b.init_rand(9);
     //b.set_constant(std::complex<double>(1, 1));
     printf("Computing smallest eigenvector 0\n");
+
     for(int i=0; i<10; i++) {
         gcr.solve(b, b);
         b.normalise();
-        printf("D(v).norm() = %.16e\n", ((*m)(b)).norm());
+        //printf("D(v).norm() = %.16e\n", ((*m)(b)).norm());
     }
+    //gcr.solve(b,b);
     // b = (*m)(b);
-    b.normalise();
     eigenvecs[0] = b;
 
     for (int count=1; count<n_vec; count++){
         printf("Computing smallest eigenvector %d\n", count);
-        Field<num_type> tmp(dims, 1);
+        Field<num_type> tmp(mesh);
         gcr.solve(eigenvecs[count-1], tmp);
         //tmp = (*m)(eigenvecs[count-1]);
         for (int j=0; j<count; j++) {
@@ -111,7 +111,6 @@ void Arnoldi<num_type>::solve(Operator<num_type> *m, Field<num_type>* eigenvecs)
         tmp.normalise();
         eigenvecs[count] = tmp;
     }
-    delete[] dims;
 }
 
 template<typename num_type>
@@ -133,10 +132,12 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
     auto eigenvecs = new Field<num_type>[param->n_eigen]; // array of eigenvectors
 
     Arnoldi eigen_solver(param->eigenvector_precomp_param, param->n_eigen);
-    eigen_solver.solve(M, eigenvecs);
+    eigen_solver.solve(M, eigenvecs, param->mesh);
 
     // doubling eigenvector count to 2 * n_eigen
-    auto eigenvecs2 = new Field<num_type>[2 * param->n_eigen];
+    int const ne = 2 * param->n_eigen;
+    //int const ne = param->n_eigen;
+    auto eigenvecs2 = new Field<num_type>[ne];
     vec_double(eigenvecs, eigenvecs2);
     delete[] eigenvecs;
 
@@ -146,7 +147,7 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
     // find eigenvectors in each block
     prolongator = new Field<num_type>*[n_blocks]; // array of pointers
     for (int i=0; i<n_blocks; i++) {
-        prolongator[i] = new Field<num_type>[2*param->n_eigen]; // each pointer points to 2*n_eigen fields
+        prolongator[i] = new Field<num_type>[ne]; // each pointer points to 2*n_eigen fields
     }
     printf("Domain decomposition block size (%d, %d, %d, %d) with block count (%d, %d, %d, %d)\n",
            param->subblock_dim, param->subblock_dim, param->subblock_dim, param->subblock_dim,
@@ -165,10 +166,10 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
                     int const block_ind[4] = {i, j, k, l}; // current block index
                     int const block_idx = Mesh<int>::ind_loc(block_ind, param->mesh.get_block_dim(), 4); // block rank
 
-                    for (int eigen_id = 0; eigen_id < 2*param->n_eigen; eigen_id++) {
-                        prolongator[block_idx][eigen_id] = restrict_block(eigenvecs2[eigen_id], block_idx,
-                                                                          subblock_size);
-                        prolongator[block_idx][eigen_id].normalise();
+                    for (int eigen_id = 0; eigen_id < ne; eigen_id++) {
+                        prolongator[block_idx][eigen_id] = restrict_block(eigenvecs2[eigen_id], block_idx,subblock_size);
+                        //prolongator[block_idx][eigen_id] = restrict_block(eigenvecs[eigen_id], block_idx,subblock_size);
+                        //prolongator[block_idx][eigen_id].normalise();
                     }
                 }
             }
@@ -177,14 +178,15 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
 
     //orthogonalise
     for (int block=0; block<n_blocks; block++) {
-        for (int vec=0; vec<2*param->n_eigen; vec++) {
+        for (int vec=0; vec<ne; vec++) {
             for (int j=0; j<vec; j++) {
-                std::complex<double> h = prolongator[block][j].dot(prolongator[block][vec]);
+                std::complex<double> const h = prolongator[block][j].dot(prolongator[block][vec]);
                 prolongator[block][vec] -= prolongator[block][j] * h;
             }
             prolongator[block][vec].normalise();
         }
     }
+    //delete[] eigenvecs;
     delete[] eigenvecs2;
 
 
@@ -201,33 +203,34 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
                     int const block_ind[4] = {i,j,k,l};
                     int block_idx = Mesh<int>::ind_loc(block_ind, param->mesh.get_block_dim(), 4);
 
-                    // find local coarse operator
-                    auto m_local = new std::complex<double> [2*param->n_eigen * 2*param->n_eigen];
-                    for (int row = 0; row<2*param->n_eigen; row++) {
-                        for (int col=0; col<2*param->n_eigen; col++) {
-                            m_local[row * 2*param->n_eigen + col] = prolongator[block_idx][row].dot((*m)(prolongator[block_idx][col]));
+                    // find self-interaction coarse operator
+                    auto m_local = new std::complex<double> [ne * ne];
+                    for (int row = 0; row<ne; row++) {
+                        for (int col=0; col<ne; col++) {
+                            m_local[row * ne + col] = prolongator[block_idx][row].dot((*m)(prolongator[block_idx][col]));
                         }
                     }
+
                     mat_block_triplets[9 * block_idx].second = std::pair<int, int>(block_idx, block_idx);
-                    mat_block_triplets[9 * block_idx].first = new Dense<int>(m_local, 2*param->n_eigen);
+                    mat_block_triplets[9 * block_idx].first = new Dense<int>(m_local, ne);
                     delete[] m_local;
 
-                    // find neighbour coarse operators
+                    // find 8 neighbour coarse operators
                     for (int dir=0; dir<4; dir++) { // 4 directions
                         for (int nb=-1; nb<=1; nb+=2) { // 2 neighbours per direction
                             // neighbour block index
                             int nb_ind[4] = {i,j,k,l};
-                            nb_ind[dir] = (nb_ind[dir]+nb+param->mesh.get_block_dim()[dir])% param->mesh.get_block_dim()[dir];
+                            nb_ind[dir] = (nb_ind[dir]+nb+(param->mesh.get_block_dim()[dir]))% (param->mesh.get_block_dim()[dir]);
                             int const nb_idx = Mesh<int>::ind_loc(nb_ind, param->mesh.get_block_dim(), 4);
 
-                            auto m_nb = new std::complex<double> [2*param->n_eigen * 2*param->n_eigen];
-                            for (num_type row = 0; row<2*param->n_eigen; row++) {
-                                for (num_type col=0; col<2*param->n_eigen; col++) {
-                                    m_nb[row * 2*param->n_eigen + col] = prolongator[nb_idx][row].dot((*m)(prolongator[block_idx][col]));
+                            auto m_nb = new std::complex<double> [ne * ne];
+                            for (num_type row = 0; row<ne; row++) {
+                                for (num_type col=0; col<ne; col++) {
+                                    m_nb[row * ne + col] = prolongator[nb_idx][row].dot((*m)(prolongator[block_idx][col]));
                                 }
                             }
                             mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].second = std::pair<int, int>(nb_idx, block_idx);
-                            mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].first = new Dense<int>(m_nb, 2*param->n_eigen);
+                            mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].first = new Dense<int>(m_nb, ne);
                             delete []m_nb;
                         }
                     }
@@ -235,8 +238,8 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
                 }}}}
 
     //printf("Organise m_coarse\n");
-    m_coarse = new HierarchicalSparse<long, int>(n_blocks, n_blocks, mat_block_triplets, 9 * n_blocks);
-    delete[] mat_block_triplets;
+    m_coarse = new HierarchicalSparse<long, int>(n_blocks, n_blocks, mat_block_triplets, 9 * n_blocks); // dense matrices passed to HierarchicalSparse
+    delete[] mat_block_triplets; // does not delete individual coarse matrices!
     param->coarse_solver->initialise(m_coarse);
     printf("Adaptive Multigrid precomputation completed.\n");
 }
@@ -245,155 +248,37 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
 template <typename num_type>
 MG<num_type>::MG(Operator<num_type>* M, MG_Param<num_type>* parameter) {
     param = parameter;
-    m = M;
-    this->dim = M->get_dim();
-
-    param->smoother_solver->initialise(m);
-    /* precomputation of reduced basis */
-    // find eigenvectors of M
-    printf("Compute global eigenvectors...\n");
-    auto eigenvecs = new Field<num_type>[param->n_eigen]; // array of eigenvectors
-
-    Arnoldi eigen_solver(param->eigenvector_precomp_param, param->n_eigen);
-    eigen_solver.solve(m, eigenvecs);
-
-    // doubling eigenvector count to 2 * n_eigen
-    auto eigenvecs2 = new Field<num_type>[param->n_eigen * 2];
-    vec_double(eigenvecs, eigenvecs2);
-    delete []eigenvecs;
-
-
-    // domain decomposition in spacetime direction
-    param->mesh.blocking(param->subblock_dim, param->spacetime); // block the mesh
-    num_type n_blocks = param->mesh.get_nblocks();
-    // find eigenvectors in each block
-    prolongator = new Field<num_type>*[n_blocks]; // array of pointers
-    for (int i=0; i<n_blocks; i++) {
-        prolongator[i] = new Field<num_type>[2 * param->n_eigen]; // each pointer points to 2*n_eigen fields
-    }
-    printf("Domain decomposition block size (%d, %d, %d, %d) with block count (%d, %d, %d, %d)\n",
-           param->subblock_dim, param->subblock_dim, param->subblock_dim, param->subblock_dim,
-           param->mesh.get_block_dim()[0], param->mesh.get_block_dim()[1],
-           param->mesh.get_block_dim()[2], param->mesh.get_block_dim()[3]);
-
-
-    num_type const subblock_size = param->mesh.get_block_size();
-    //printf("Project eigenvectors in %d domains... ", n_blocks);
-    // loop over blocks
-    for (int i=0; i<param->mesh.get_block_dim()[0]; i++){
-        for (int j=0; j<param->mesh.get_block_dim()[1]; j++){
-            for (int k=0; k<param->mesh.get_block_dim()[2]; k++){
-                for (int l=0; l<param->mesh.get_block_dim()[3]; l++) {
-                    // find relevant indices
-                    int const block_ind[4] = {i, j, k, l}; // current block index
-                    int const block_idx = Mesh<int>::ind_loc(block_ind, param->mesh.get_block_dim(), 4); // block rank
-
-                    for (int eigen_id = 0; eigen_id < 2 * param->n_eigen; eigen_id++) {
-                        prolongator[block_idx][eigen_id] = restrict_block(eigenvecs2[eigen_id], block_idx,
-                                                                          subblock_size);
-                        //prolongator[block_idx][eigen_id].normalise();
-                    }
-                }
-            }
-        }
-    }
-
-
-    // orthogonalise
-    for (int block=0; block<n_blocks; block++) {
-        prolongator[block][0].normalise();
-        for (int vec=1; vec<2*param->n_eigen; vec++) {
-            for (int j=0; j<vec; j++) {
-                std::complex<double> h = prolongator[block][j].dot(prolongator[block][vec]);
-                prolongator[block][vec] -= prolongator[block][j] * h;
-            }
-            prolongator[block][vec].normalise();
-        }
-    }
-
-    delete [] eigenvecs2;
-
-
-    printf("Computing coarse matrix... \n");
-    auto mat_block_triplets = new std::pair<Operator<int>*, std::pair<int, int>> [9 * n_blocks];
-
-    omp_set_num_threads(14);
-#pragma omp parallel for collapse(4)
-    // loop over all sub-blocks
-    for (int i=0; i<param->mesh.get_block_dim()[0]; i++){
-        for (int j=0; j<param->mesh.get_block_dim()[1]; j++){
-            for (int k=0; k<param->mesh.get_block_dim()[2]; k++){
-                for (int l=0; l<param->mesh.get_block_dim()[3]; l++){
-                    int const block_ind[4] = {i,j,k,l};
-                    int block_idx = Mesh<int>::ind_loc(block_ind, param->mesh.get_block_dim(), 4);
-
-                    // find local coarse operator
-                    auto m_local = new std::complex<double> [2*param->n_eigen * 2*param->n_eigen];
-                    for (int row = 0; row<2*param->n_eigen; row++) {
-                        for (int col=0; col<2*param->n_eigen; col++) {
-                            m_local[row * 2*param->n_eigen + col] = prolongator[block_idx][row].dot((*m)(prolongator[block_idx][col]));
-                        }
-                    }
-                    mat_block_triplets[9 * block_idx].second = std::pair<int, int>(block_idx, block_idx);
-                    mat_block_triplets[9 * block_idx].first = new Dense<int>(m_local, 2*param->n_eigen);
-                    delete[] m_local;
-
-                    // find neighbour coarse operators
-                    for (int dir=0; dir<4; dir++) { // 4 directions
-                        for (int nb=-1; nb<=1; nb+=2) { // 2 neighbours per direction
-                            // neighbour block index
-                            int nb_ind[4] = {i,j,k,l};
-                            nb_ind[dir] = (nb_ind[dir]+nb+param->mesh.get_block_dim()[dir])% param->mesh.get_block_dim()[dir];
-                            int const nb_idx = Mesh<int>::ind_loc(nb_ind, param->mesh.get_block_dim(), 4);
-
-                            auto m_nb = new std::complex<double> [2*param->n_eigen * 2*param->n_eigen];
-                            for (num_type row = 0; row<2*param->n_eigen; row++) {
-                                for (num_type col=0; col<2*param->n_eigen; col++) {
-                                    m_nb[row * 2*param->n_eigen + col] = prolongator[nb_idx][row].dot((*m)(prolongator[block_idx][col]));
-                                }
-                            }
-                            mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].second = std::pair<int, int>(nb_idx, block_idx);
-                            mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].first = new Dense<int>(m_nb, 2*param->n_eigen);
-                            delete []m_nb;
-                        }
-                    }
-                    //printf("Collect m_coarse %d\n", block_idx);
-                }}}}
-
-    //printf("Organise m_coarse\n");
-    m_coarse = new HierarchicalSparse<long, int>(n_blocks, n_blocks, mat_block_triplets, 9 * n_blocks);
-    param->coarse_solver->initialise(m_coarse);
-    delete[] mat_block_triplets;
-
-    printf("Adaptive Multigrid precomputation completed.\n");
+    initialise(M);
 }
 
 template <typename num_type>
 void MG<num_type>::vec_double(Field<num_type> *vecs, Field<num_type>* vecs_doubled) {
     for (int i=0; i<param->n_eigen; i++) {
-        vecs[i].init_rand(i);
-    }
-    vecs[0].mod_val_at(20, 2000);
-
-
-    // P_+ = 0.5*(1 + gamma_5)
-    for (int i=0; i<param->n_eigen; i++) {
-        vecs_doubled[i] = (vecs[i] + vecs[i].gamma5(4)) * 0.5;
-        printf("input+ = %.16e\n", vecs[i].val_at(3).real());
-        printf("input norm+ = %.16e\n", vecs[i].norm());
-        printf("norm+ = %.16e\n", vecs_doubled[i].norm());
+        Field vecs_g5 = vecs[i].gamma5(4);
+        // P+ = 0.5*(1 + gamma_5)
+        vecs_doubled[i] = (vecs[i] + vecs_g5) * 0.5;
         //vecs_doubled[i] = vecs[i];
+        //printf("norm+ = %.16e\n", vecs_doubled[i].norm());
+
+        // P- = 0.5*(1 - gamma_5)
+        vecs_doubled[i + param->n_eigen] = (vecs[i] - vecs_g5) * 0.5;
+        //vecs_doubled[i+param->n_eigen] = vecs[i].gamma5(4);
+        //printf("norm- = %.16e\n", vecs_doubled[i+param->n_eigen].norm());
     }
 
-    // P_- = 0.5*(1 - gamma_5)
-    for (int j=0; j<param->n_eigen; j++) {
-        Field store = vecs[j].gamma5(4);
-        vecs_doubled[j + param->n_eigen] = (vecs[j] + store* (-1.)) * 0.5;
-        printf("input- = %.16e\n", vecs[j].val_at(3).real());
-        printf("input norm- = %.16e\n", vecs[j].norm());
-        printf("norm- = %.18e\n", vecs_doubled[j+param->n_eigen].norm());
-        //vecs_doubled[j + param->n_eigen] = vecs[j].gamma5(4);
+
+/*
+    // renormalise eigenbasis
+    for (int count=0; count<2 * param->n_eigen; count++){
+        Field tmp = vecs_doubled[count];
+        for (int j=0; j<count; j++) {
+            std::complex<double> h = vecs_doubled[j].dot(tmp);
+            tmp -= vecs_doubled[j] * h;
+        }
+        tmp.normalise();
+        vecs_doubled[count] = tmp;
     }
+    */
 
 }
 
@@ -402,11 +287,14 @@ Field<num_type> MG<num_type>::expand(Field<num_type> &x_coarse){
     Field<num_type> x_fine(param->mesh);
     x_fine.set_zero();
 
+    //int const ne = param->n_eigen;
+    int const ne = 2 * param->n_eigen;
+
     // loop over all blocks
     for (int block=0; block< param->mesh.get_nblocks(); block++) {
         // loop over all members of x_coarse_local
-        for (int eigen_id = 0; eigen_id < 2*param->n_eigen; eigen_id++) {
-            x_fine += prolongator[block][eigen_id] * x_coarse.val_at(block*2*param->n_eigen + eigen_id);
+        for (int eigen_id = 0; eigen_id < ne; eigen_id++) {
+            x_fine += prolongator[block][eigen_id] * x_coarse.val_at(block*ne + eigen_id);
         }
     }
 
@@ -416,14 +304,16 @@ Field<num_type> MG<num_type>::expand(Field<num_type> &x_coarse){
 template<typename num_type>
 Field<num_type> MG<num_type>::restrict(Field<num_type> &x_fine){
     int const nblocks = param->mesh.get_nblocks();
-    num_type dims[1] = {2*param->n_eigen * nblocks};
+    //int const ne = param->n_eigen;
+    int const ne = 2 * param->n_eigen;
+    num_type dims[1] = {ne * nblocks};
     Field<num_type> x_coarse(dims, 1);
 
     // loop over all block indices
     for (int block=0; block<nblocks; block++) {
         // loop over all members of x_coarse x_i = P_i.dot(x)
-        for (int eigen_id = 0; eigen_id < 2*param->n_eigen; eigen_id++) {
-            x_coarse.mod_val_at(block*2*param->n_eigen + eigen_id, prolongator[block][eigen_id].dot(x_fine));
+        for (int eigen_id = 0; eigen_id < ne; eigen_id++) {
+            x_coarse.mod_val_at(block*ne + eigen_id, prolongator[block][eigen_id].dot(x_fine));
         }
     }
 
@@ -441,7 +331,7 @@ Field<num_type> MG<num_type>::restrict_block(Field<num_type> &x_fine, num_type b
             for (int colour=0; colour<3; colour++){
                 num_type idx_glob = param->mesh.get_block_map(block_idx)[idx_loc];
                 num_type* full_glob = param->mesh.alloc_full_index(idx_glob, spinor, colour, param->spacetime, param->spinor);
-                x_coarse.mod_val_at(param->mesh.ind_loc(full_glob), x_fine.val_at(param->mesh.ind_loc(full_glob)));
+                x_coarse.mod_val_at(full_glob, x_fine.val_at(full_glob));
                 delete []full_glob;
             }
         }
@@ -469,7 +359,8 @@ void MG<num_type>::solve(Field<num_type> rhs, Field<num_type> x) {
     //num_type const dims[1] = {2*param->n_eigen * param->mesh.get_nblocks()};
     //Field<num_type> x_coarse(dims, 1);
     Field<num_type> x_coarse = (*param->coarse_solver)(rhs_coarse);
-    x += expand(x_coarse); // add to x
+    auto x_corr = expand(x_coarse);
+    x += x_corr; // add to x
 
     // 3. post-smoothing
     //x = (*param->smoother_solver)(rhs);
@@ -480,34 +371,77 @@ void MG<num_type>::test_MG(Operator<num_type> *M) {
     /* test eigenvector 0 */
     int n=0;
 
-    // sum over M applied to each subblock eigenvector
+    // M applied to eigenvector[0] and restrict
     int const nblocks = param->mesh.get_nblocks();
     num_type const block_dim = param->mesh.get_block_size();
     Field large(prolongator[0][0].get_mesh());
     large.set_zero();
     for (int i=0; i<nblocks; i++) {
-        large += (*M)(prolongator[i][n]);
+        large +=(prolongator[i][n]);
+        //printf("block %d\t%f \n", i, prolongator[i][n].norm());
     }
+    printf("eigen0.dot(eigen1) = %.5e\n", large.dot(prolongator[0][1]));
+    large = (*M)(large);
+
+    printf("M (fine) norm = %f\n", large.norm());
+
     Field small = restrict(large);
     Field result = expand(small);
+
     //result.normalise();
 
-    // m_coarse applied to sum over all eigenvectors
-    Field eigenbasis = Field<num_type>(prolongator[0][0].get_mesh());
+    // m_coarse applied to sum over all eigenvectors and expand
+    Field eigenbasis(prolongator[0][0].get_mesh());
     eigenbasis.set_zero();
 
     for (int block = 0; block < nblocks; block++) {
         eigenbasis += prolongator[block][n];
     }
+
     Field inter = restrict(eigenbasis);
     Field inter1 = (*m_coarse)(inter);
     Field result1 = expand(inter1);
     //result1.normalise();
+    printf("m (coarse) norm = %f\n", inter1.norm());
 
 
-    printf("Relative Difference = %.5e\n", (result - result1).norm()/result.norm());
+
+    printf("Relative Difference between TRM and TmR = %.5e\n", (result - result1).norm()/result.norm());
     printf("LHS norm = %.5e\n", result.norm());
     printf("RHS norm = %.5e\n", result1.norm());
+
+
+    printf("\n\nTest projector:\n");
+    printf("norm of eigenvector 0 = %f\n",eigenbasis.norm());
+    auto f = (*M)(eigenbasis);
+
+
+
+    auto r = restrict(eigenbasis);
+    printf("eigenvector 0 restrict:\n");
+    for (int ne=0; ne<param->n_eigen *2 ; ne++) {
+        printf("(%f, %f)\t", r.val_at(ne).real(), r.val_at(ne).imag());
+    }
+    printf("\n\n");
+    auto e = expand(r);
+    for (int ne=0; ne<param->n_eigen *2 ; ne++) {
+        printf("(%f, %f)\t", e.val_at(ne).real(), e.val_at(ne).imag());
+    }
+
+    printf("\neigenvector 0 - expand(restrict(eigenvector 0)) = %.5e\n\n", (e - eigenbasis).norm());
+    for (int i=0; i<M->get_dim(); i++) {
+        //printf(" %f\t%f\n", e.val_at(i), eigenbasis.val_at(i));
+    }
+
+    /*
+    for (int i=0; i<M->get_dim(); i++) {
+        auto diff= eigenbasis.val_at(i) - e.val_at(i);
+        if (std::pow(diff.real(), 2) + std::pow(diff.imag(), 2) > 5e-3){
+            printf("Broke at %d difference is  = %f\n", i, (eigenbasis.val_at(i) - e.val_at(i)));
+        }
+        else if (i==M->get_dim()-1) printf("PASS\n");
+    }
+     */
 }
 
 template <typename num_type>

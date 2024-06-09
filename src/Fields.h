@@ -43,10 +43,10 @@ public:
     [[nodiscard]] num_type get_ndim() const; // get number of dimensions;
     [[nodiscard]] num_type field_size() const; // get length of u_field
     Mesh<num_type> get_mesh() const; //
-    std::complex<double> val_at(num_type const *index) const; // retrieve field value at an index
-    std::complex<double> val_at(num_type const location) const;
-    void mod_val_at(num_type const *index, std::complex<double> const new_value); // modify field value at index
-    void mod_val_at(const num_type location, std::complex<double> const new_value); // modify field value at memory location
+    std::complex<double> val_at(num_type const *index); // retrieve field value at an index
+    std::complex<double> val_at(num_type location) const;
+    void mod_val_at(num_type const *index, std::complex<double> new_value); // modify field value at index
+    void mod_val_at(num_type location, std::complex<double> new_value); // modify field value at memory location
 
 
     // Operations
@@ -61,8 +61,6 @@ public:
     Field &operator-=(const Field& f);
     void normalise();
     Field gamma5(int spinor_index) const; // left multiply with gamma5
-
-
 
 
     ~Field();
@@ -152,12 +150,12 @@ void Field<num_type>::set_constant(std::complex<double> c) {
     }
 }
 template <typename num_type>
-std::complex<double> Field<num_type>::val_at(const num_type *index) const{
-    for (num_type i=0; i<mesh.ndim; i++) {
-        assertm(index[i] < mesh.dim[i], "Field memory access out of bound!");
+std::complex<double> Field<num_type>::val_at(const num_type *index){
+    for (num_type i=0; i<mesh.get_ndim(); i++) {
+        assertm(index[i] < mesh.get_dims()[i], "Field memory access out of bound!");
     }
 
-    const num_type ind = Mesh<num_type>::ind_loc(index, mesh.dim, mesh.ndim);
+    const num_type ind = mesh.ind_loc(index);
 
     return field[ind];
 }
@@ -187,8 +185,8 @@ Mesh<num_type> Field<num_type>::get_mesh() const {
 
 template <typename num_type>
 Field<num_type>::~Field() {
-//    if (field != nullptr)
-//        free(field);
+    if (field != nullptr)
+        free(field);
 }
 
 template <typename num_type>

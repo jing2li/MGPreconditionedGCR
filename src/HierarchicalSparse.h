@@ -51,7 +51,7 @@ protected:
 template <typename num_type, typename coarse_num_type>
 HierarchicalSparse<num_type, coarse_num_type>::HierarchicalSparse(coarse_num_type block_rows, coarse_num_type block_cols, std::pair<Operator<coarse_num_type>*, std::pair<coarse_num_type, coarse_num_type>> *triplets, coarse_num_type triplet_length) {
     coarse_num_type const sub_dim = triplets[0].first->get_dim();
-    nrow= block_rows;
+    nrow = block_rows;
     this->dim= block_cols * sub_dim;
     ROW = new coarse_num_type [block_rows+1];
     COL = new coarse_num_type [triplet_length];
@@ -95,7 +95,7 @@ template <typename num_type, typename coarse_num_type>
 Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<num_type> const &f){
     assertm(this->dim == f.field_size(), "Sparse matrix dimension does not match Field dimension!");
     // returns output = M(f)
-    Field output(f.get_mesh());
+    Field<num_type> output(f.get_mesh());
     // dim of subblock
     coarse_num_type const sub_dim = VAL[0]->get_dim();
 
@@ -123,7 +123,7 @@ Field<num_type> HierarchicalSparse<num_type, coarse_num_type>::operator()(Field<
         }
     }
 
-    // modification to output
+    // compute M(f)
     // Loop over block rows
 #pragma omp for
     for (coarse_num_type row=0; row<nrow; row++) {
