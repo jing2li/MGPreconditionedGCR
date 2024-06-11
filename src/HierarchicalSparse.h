@@ -24,7 +24,7 @@ class HierarchicalSparse: public Operator<num_type> {
 public:
     // unordered Triplet -> Sparse
     HierarchicalSparse(coarse_num_type block_rows, coarse_num_type block_cols, std::pair<Operator<coarse_num_type>*, std::pair<coarse_num_type, coarse_num_type>> *triplets, coarse_num_type triplet_length);
-
+    HierarchicalSparse(HierarchicalSparse const &m);
 
     // Query Sparse matrix information
     [[nodiscard]] num_type get_nrow() const {return nrow *VAL[0]->get_dim();}; // number of rows
@@ -46,6 +46,13 @@ protected:
     coarse_num_type *ROW=NULL; // location where the row starts
     coarse_num_type nrow=0; // number of block rows
 };
+
+template<typename num_type, typename coarse_num_type>
+HierarchicalSparse<num_type, coarse_num_type>::HierarchicalSparse(const HierarchicalSparse &m) {
+    nrow = m.nrow;
+    this->dim = m.dim;
+
+}
 
 
 template <typename num_type, typename coarse_num_type>

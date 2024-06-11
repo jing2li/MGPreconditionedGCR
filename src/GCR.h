@@ -20,7 +20,7 @@ class GCR: public Operator<num_type> {
 public:
     // load LSE that needs to be solved
     GCR()= default;
-    GCR(GCR const & gcr)= delete;
+    GCR(GCR const & gcr) {param = gcr.param; initialise(gcr.A_operator);};
     GCR(const std::complex<double> *matrix, const num_type dimension);
     explicit GCR(Operator<num_type> *M, GCR_Param<num_type>* gcr_param) : A_operator(M) {param = gcr_param; this->dim = A_operator->get_dim();};
 
@@ -37,7 +37,7 @@ public:
     [[nodiscard]] std::complex<double> val_at(num_type row, num_type col) const override {return A_operator->val_at(row, col);}; // value at (row, col)
     [[nodiscard]] std::complex<double> val_at(num_type location) const override {return A_operator->val_at(location);}; // value at memory location
     Field<num_type> operator()(Field<num_type> const &f) override; // matrix vector multiplication
-
+    //GCR<num_type> &operator=()(GCR<num_type> const &op) noexcept;
 
     ~GCR() override;
 private:
@@ -46,10 +46,20 @@ private:
     GCR_Param<num_type>* param = nullptr;
 };
 
+/*
+template<typename num_type>
+GCR<num_type> &GCR<num_type>::operator=(const GCR<num_type> &op) noexcept{
+    param = op.param;
+    initialise(op.A_operator);
+    return *this;
+}
+
+*/
 
 template<typename num_type>
 Field<num_type> GCR<num_type>::operator()(const Field<num_type> &f) {
     Field<num_type> x(f.get_mesh());
+    x.init_rand(2);
     solve(f, x);
     return x;
 }
@@ -179,6 +189,7 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
     Field Ar(Ap);
 
 
+
     // compute and apply preconditioning if specified
     if(param->right_precond != nullptr) {
         param->right_precond->initialise(A_operator);
@@ -223,12 +234,15 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
             r = (*(param->right_precond))(r);
         }
 
+
         // new Ar
         Ar = (*A_operator)(r);
+
 
         if (param->left_precond != nullptr) {
             Ar = (*(param->left_precond))(Ar);
         }
+
 
         // beta corrections loop
         int const lim = std::min(storage_size, iter_count);

@@ -46,8 +46,8 @@ int main() {
     /* 4. Testing MG*/
     //test_MG();
     //test_MG_precompute();
-    //k_critical_mg_precond();
-    test_MG_property();
+    k_critical_mg_precond();
+    //test_MG_property();
 
 
     /* 5. debug */
@@ -839,11 +839,11 @@ void k_critical_mg_precond() {
 
     GCR_Param<long> eigen(0, 10, 10, 1e-8, false, nullptr, nullptr);
     GCR_Param<long> coarse(0, 10, 1, 1e-8, false, nullptr, nullptr);
-    GCR_Param<long> smooth(0, 10, 0, 1e-8, false, nullptr, nullptr);
+    GCR_Param<long> smooth(0, 10, 1, 1e-8, false, nullptr, nullptr);
 
 
     double const st = (0.17865- 0.05)/20.;
-    for (int exp=15; exp<16; exp++) {
+    for (int exp=10; exp<21; exp++) {
         double const k = 0.05 + exp * st;
         printf("k number %d\n", exp);
         auto Dirac = new DiracOp<long>(D, k);
@@ -855,16 +855,15 @@ void k_critical_mg_precond() {
 
         auto solver_coarse = new GCR(&coarse);
         auto solver_smooth = new GCR(&smooth);
-        MG_Param<long> param(mesh, 4, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
-        auto mg = new MG(Dirac, &param);
+        MG_Param<long> param(mesh, 8, 10, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+        auto mg = new MG(&param);
 
 
-        GCR_Param<long> gcr_param_new(0, 5, 2000, 1e-13, true, nullptr, mg);
-        //GCR_Param<long> gcr_param_new(0, 10, 4000, 1e-13, true, nullptr, nullptr);
+        auto gcr_param_new = new GCR_Param<long>(0, 10, 2000, 1e-13, true, nullptr, mg);
+        //GCR_Param<long> gcr_param_new(0, 2, 4000, 1e-13, true, nullptr, nullptr);
 
-        GCR gcr_precond(Dirac, &gcr_param_new);
+        GCR gcr_precond(Dirac, gcr_param_new);
         Field x = gcr_precond(rhs);
-
 
         delete mg;
         delete Dirac;
@@ -887,7 +886,7 @@ void test_MG_property() {
     GCR_Param<long> smooth(0, 10, 1, 1e-8, false, nullptr, nullptr);
     auto solver_coarse = new GCR(&coarse);
     auto solver_smooth = new GCR(&smooth);
-    MG_Param<long> param(mesh, 8, 2, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
+    MG_Param<long> param(mesh, 8, 10, &eigen, solver_coarse, solver_smooth, 1, nullptr, nullptr);
     auto mg = new MG(Dirac, &param);
 
     mg->test_MG(Dirac);
