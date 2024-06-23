@@ -20,7 +20,10 @@ class GCR: public Operator<num_type> {
 public:
     // load LSE that needs to be solved
     GCR()= default;
-    GCR(GCR const & gcr) {param = gcr.param; initialise(gcr.A_operator);};
+    GCR(GCR const & gcr) {
+        param = gcr.param;
+        initialise(gcr.A_operator);
+    };
     GCR(const std::complex<double> *matrix, const num_type dimension);
     explicit GCR(Operator<num_type> *M, GCR_Param<num_type>* gcr_param) : A_operator(M) {param = gcr_param; this->dim = A_operator->get_dim();};
 
@@ -192,11 +195,11 @@ void GCR<num_type>::solve(const Field<num_type>& rhs, Field<num_type>& x) {
 
     // compute and apply preconditioning if specified
     if(param->right_precond != nullptr) {
-        param->right_precond->initialise(A_operator);
+        //param->right_precond->initialise(A_operator);
         r = (*(param->right_precond))(r);
     }
     if(param->left_precond != nullptr) {
-        param->left_precond->initialise(A_operator);
+        //param->left_precond->initialise(A_operator);
         r = (*(param->left_precond))(r);
     }
 

@@ -277,8 +277,11 @@ Field<num_type> &Field<num_type>::operator=(const Field& f) noexcept{
         return *this;
     }
     else {
-        throw std::invalid_argument("Dimension mismatch.");
+        printf("Dimension mismatch.\n");
+        exit(1);
+        return *this;
     }
+
 
 }
 

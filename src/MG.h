@@ -142,14 +142,14 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
     Arnoldi eigen_solver(param->eigenvector_precomp_param, param->n_eigen);
     eigen_solver.solve(M, eigenvecs, param->mesh);
 
-    /*
+
     // doubling eigenvector count to 2 * n_eigen
     int const ne = 2 * param->n_eigen;
     auto eigenvecs2 = new Field<num_type>[ne];
     vec_double(eigenvecs, eigenvecs2);
     delete[] eigenvecs;
-*/
-    int const ne = param->n_eigen;
+
+    //int const ne = param->n_eigen;
 
     // domain decomposition in spacetime direction
     param->mesh.blocking(param->subblock_dim, param->spacetime); // block the mesh
@@ -177,8 +177,8 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
                     int const block_idx = Mesh<int>::ind_loc(block_ind, param->mesh.get_block_dim(), 4); // block rank
 
                     for (int eigen_id = 0; eigen_id < ne; eigen_id++) {
-                        //prolongator[block_idx][eigen_id] = restrict_block(eigenvecs2[eigen_id], block_idx,subblock_size);
-                        prolongator[block_idx][eigen_id] = restrict_block(eigenvecs[eigen_id], block_idx,subblock_size);
+                        prolongator[block_idx][eigen_id] = restrict_block(eigenvecs2[eigen_id], block_idx,subblock_size);
+                        //prolongator[block_idx][eigen_id] = restrict_block(eigenvecs[eigen_id], block_idx,subblock_size);
                         //prolongator[block_idx][eigen_id].normalise();
                     }
                 }
@@ -196,8 +196,8 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
             prolongator[block][vec].normalise();
         }
     }
-    delete[] eigenvecs;
-    //delete[] eigenvecs2;
+    //delete[] eigenvecs;
+    delete[] eigenvecs2;
 
 
     printf("Computing coarse matrix... \n");
@@ -227,30 +227,52 @@ void MG<num_type>::initialise(Operator<num_type> *M) {
 
                     // find 8 neighbour coarse operators
                     for (int dir=0; dir<4; dir++) { // 4 directions
-                        for (int nb=-1; nb<=1; nb+=2) { // 2 neighbours per direction
-                            // neighbour block index
-                            int nb_ind[4] = {i,j,k,l};
-                            nb_ind[dir] = (nb_ind[dir]+nb+(param->mesh.get_block_dim()[dir]))% (param->mesh.get_block_dim()[dir]);
-                            int const nb_idx = Mesh<int>::ind_loc(nb_ind, param->mesh.get_block_dim(), 4);
+                        // neighbour in the positive direction
+                        int nb_ind[4] = {i,j,k,l};
+                        nb_ind[dir] = (nb_ind[dir]+1+(param->mesh.get_block_dim()[dir]))% (param->mesh.get_block_dim()[dir]);
+                        int const nb_idx = Mesh<int>::ind_loc(nb_ind, param->mesh.get_block_dim(), 4);
 
-                            auto m_nb = new std::complex<double> [ne * ne];
-                            if (nb_idx != block_idx) {
-                                for (num_type row = 0; row < ne; row++) {
-                                    for (num_type col = 0; col < ne; col++) {
-                                        m_nb[row * ne + col] = prolongator[nb_idx][row].dot(
-                                                (*m)(prolongator[block_idx][col]));
-                                    }
+                        // neighbour in the negative direction
+                        nb_ind[dir] = (nb_ind[dir]-2+(param->mesh.get_block_dim()[dir]))% (param->mesh.get_block_dim()[dir]);
+                        int const nb_idx_1 = Mesh<int>::ind_loc(nb_ind, param->mesh.get_block_dim(), 4);
+
+                        // positive direction neighbour
+                        auto m_nb = new std::complex<double> [ne * ne];
+                        if (nb_idx != block_idx) {
+                            for (num_type row = 0; row < ne; row++) {
+                                for (num_type col = 0; col < ne; col++) {
+                                    m_nb[row * ne + col] = prolongator[nb_idx][row].dot(
+                                            (*m)(prolongator[block_idx][col]));
                                 }
                             }
-                            else {
-                                for (int i=0; i<ne *ne; i++) {
-                                    m_nb[i] = 0.;
-                                }
-                            }
-                            mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].second = std::pair<int, int>(nb_idx, block_idx);
-                            mat_block_triplets[9 * block_idx + 2 * dir + (nb+1)/2 + 1].first = new Dense<int>(m_nb, ne);
-                            delete []m_nb;
                         }
+                        else {
+                            for (int ind=0; ind<ne *ne; ind++) {
+                                m_nb[ind] = 0.;
+                            }
+                        }
+                        mat_block_triplets[9 * block_idx + 2 * dir +  1].second = std::pair<int, int>(nb_idx, block_idx);
+                        mat_block_triplets[9 * block_idx + 2 * dir +  1].first = new Dense<int>(m_nb, ne);
+                        delete []m_nb;
+
+                        // negative direction neighbour
+                        auto m_nb_1 = new std::complex<double> [ne * ne];
+                        if (nb_idx_1 != block_idx && nb_idx_1 != nb_idx) {
+                            for (num_type row = 0; row < ne; row++) {
+                                for (num_type col = 0; col < ne; col++) {
+                                    m_nb_1[row * ne + col] = prolongator[nb_idx][row].dot(
+                                            (*m)(prolongator[block_idx][col]));
+                                }
+                            }
+                        }
+                        else {
+                            for (int ind=0; ind<ne *ne; ind++) {
+                                m_nb_1[ind] = 0.;
+                            }
+                        }
+                        mat_block_triplets[9 * block_idx + 2 * dir + 2].second = std::pair<int, int>(nb_idx_1, block_idx);
+                        mat_block_triplets[9 * block_idx + 2 * dir + 2].first = new Dense<int>(m_nb_1, ne);
+                        delete []m_nb;
                     }
                     //printf("Collect m_coarse %d\n", block_idx);
                 }}}}
@@ -327,8 +349,8 @@ Field<num_type> MG<num_type>::expand(Field<num_type> &x_coarse){
     Field<num_type> x_fine(param->mesh);
     x_fine.set_zero();
 
-    int const ne = param->n_eigen;
-    //int const ne = 2 * param->n_eigen;
+    //int const ne = param->n_eigen;
+    int const ne = 2 * param->n_eigen;
 
     // loop over all blocks
     for (int block=0; block< param->mesh.get_nblocks(); block++) {
@@ -344,8 +366,8 @@ Field<num_type> MG<num_type>::expand(Field<num_type> &x_coarse){
 template<typename num_type>
 Field<num_type> MG<num_type>::restrict(Field<num_type> &x_fine){
     int const nblocks = param->mesh.get_nblocks();
-    int const ne = param->n_eigen;
-    //int const ne = 2 * param->n_eigen;
+    //int const ne = param->n_eigen;
+    int const ne = 2 * param->n_eigen;
     num_type dims[1] = {ne * nblocks};
     Field<num_type> x_coarse(dims, 1);
 
@@ -401,7 +423,7 @@ void MG<num_type>::solve(Field<num_type> rhs, Field<num_type> x) {
     Field<num_type> x_coarse(rhs_coarse.get_mesh());
     x_coarse = (*param->coarse_solver)(rhs_coarse);
     auto x_corr = expand(x_coarse);
-    x += x_corr; // add to x
+    x += x_corr * 0.1; // add to x
 
     // 3. post-smoothing
     x = (*param->smoother_solver)(rhs);
@@ -423,7 +445,7 @@ void MG<num_type>::test_MG(Operator<num_type> *M) {
         //printf("block %d\t%f \n", i, prolongator[i][n].norm());
     }
     large.normalise();
-    printf("eigen0.dot(eigen1) = %.5e\n", large.dot(prolongator[0][1]));
+        printf("eigen0.dot(eigen1) = %.5e\n", large.dot(prolongator[0][1]));
     large = (*M)(large);
 
     printf("M (fine) norm = %f\n", large.norm());
