@@ -7,9 +7,10 @@
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 
-void parse_data(){
+void parse_data(const std::string& file_loc){
     std::ifstream file;
-    file.open("../../data/sample_matrix/conf5_4-8x8-05.mtx");
+    file.open(file_loc);
+    //file.open("../../data/sample_matrix/conf5_4-8x8-05.mtx");
     if(file) printf("File read is successful.\n");
     else printf("File read is unsuccessful!\n");
 

@@ -12,7 +12,7 @@
 #include "Operator.h"
 #include <vector>
 
-void parse_data();
+void parse_data(const std::string& file_loc);
 
 Sparse<long> read_data(const std::string& filename);
 
